@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inside a Transformer: the forward pass, one number at a time</title>
+<style>
+  :root{
+    --ink:#1a1d24;
+    --paper:#f3efe6;
+    --panel:#fbf9f4;
+    --line:#d9d2c4;
+    --muted:#6f6a5f;
+    --edit:#2f6f5b;      /* editable accent (deep teal) */
+    --edit-bg:#e8f1ec;
+    --calc:#54616e;      /* computed */
+    --calc-bg:#eef0f2;
+    --hot:#b5532a;       /* prediction / highlight */
+    --hot-bg:#f6e6dc;
+    --grid-gap:3px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    line-height:1.5;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 20px 120px}
+  header{margin-bottom:8px}
+  .eyebrow{
+    font-family:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
+    font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--edit);margin-bottom:14px;font-weight:600;
+  }
+  h1{
+    font-size:clamp(28px,4.4vw,44px);line-height:1.08;margin:0 0 14px;
+    font-weight:600;letter-spacing:-.01em;
+  }
+  h1 em{font-style:italic;color:var(--hot)}
+  .lede{font-size:18px;max-width:60ch;color:#37332b;margin:0 0 6px}
+  .lede.small{font-size:15px;color:var(--muted);max-width:64ch}
+
+  .controls{
+    display:flex;flex-wrap:wrap;gap:12px;align-items:center;
+    margin:26px 0 10px;padding:16px 18px;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;
+  }
+  .controls .sentence{
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:15px;
+    color:var(--ink);
+  }
+  .controls .sentence b{color:var(--edit)}
+  .controls .sentence .pred{color:var(--hot);font-weight:700}
+  button{
+    font-family:inherit;font-size:15px;cursor:pointer;
+    background:var(--ink);color:var(--paper);border:none;
+    padding:9px 18px;border-radius:7px;letter-spacing:.01em;
+    transition:transform .08s ease, background .15s ease;
+  }
+  button:hover{background:#000}
+  button:active{transform:translateY(1px)}
+  button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  button.ghost:hover{background:#fff}
+  button:focus-visible{outline:2px solid var(--edit);outline-offset:2px}
+
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin:14px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .chip{width:13px;height:13px;border-radius:3px;display:inline-block;border:1px solid rgba(0,0,0,.12)}
+  .chip.e{background:var(--edit-bg);border-color:var(--edit)}
+  .chip.c{background:var(--calc-bg)}
+  .chip.h{background:var(--hot-bg);border-color:var(--hot)}
+
+  /* steps */
+  .step{margin-top:40px;border-top:1px solid var(--line);padding-top:26px}
+  .step-head{display:flex;align-items:baseline;gap:14px;margin-bottom:4px}
+  .step-num{
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;
+    color:var(--edit);font-weight:600;border:1px solid var(--edit);
+    border-radius:50%;width:30px;height:30px;flex:0 0 30px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .step h2{font-size:21px;margin:0;font-weight:600;letter-spacing:-.005em}
+  .step .formula{
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;
+    color:var(--edit);background:var(--edit-bg);padding:2px 8px;border-radius:5px;
+    display:inline-block;
+  }
+  .step p.note{color:var(--muted);font-size:15px;margin:8px 0 18px;max-width:66ch}
+
+  .matrix-block{margin:14px 0 4px}
+  .matrix-label{
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;
+    color:var(--muted);margin-bottom:7px;letter-spacing:.02em;
+  }
+  .matrix-label b{color:var(--ink)}
+
+  .grid{display:inline-grid;gap:var(--grid-gap);vertical-align:top}
+  .rowlabels{display:inline-grid;gap:var(--grid-gap);vertical-align:top;margin-right:8px}
+  .matrix-row{display:flex;align-items:center;gap:10px;margin-bottom:2px}
+  .rlabel{
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;
+    color:var(--muted);width:62px;text-align:right;flex:0 0 62px;
+  }
+
+  .cell{
+    width:74px;height:34px;border-radius:5px;border:1px solid var(--calc-bg);
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;
+    text-align:right;padding:0 8px;background:var(--calc-bg);color:var(--calc);
+    display:flex;align-items:center;justify-content:flex-end;
+  }
+  input.cell{outline:none}
+  input.cell.editable{
+    background:var(--edit-bg);border:1px solid #bcd8cc;color:var(--edit);font-weight:600;
+  }
+  input.cell.editable:focus{border-color:var(--edit);background:#fff;box-shadow:0 0 0 2px rgba(47,111,91,.15)}
+  .cell.hot{background:var(--hot-bg);border-color:var(--hot);color:var(--hot);font-weight:700}
+  .cell.masked{opacity:.32;font-style:italic}
+  .cell.colhead,.cell.rowhead{
+    background:transparent;border-color:transparent;color:var(--muted);
+    font-size:11px;justify-content:center;height:22px;
+  }
+
+  .twocol{display:flex;gap:34px;flex-wrap:wrap;align-items:flex-start}
+
+  /* prediction panel */
+  .predict{
+    margin-top:44px;background:var(--ink);color:var(--paper);
+    border-radius:14px;padding:28px 30px;
+  }
+  .predict h2{color:var(--paper);margin:0 0 6px;font-size:22px}
+  .predict .sub{color:#c8c2b4;font-size:14px;margin:0 0 22px;max-width:60ch}
+  .bars{display:flex;flex-direction:column;gap:9px;max-width:560px}
+  .bar-row{display:flex;align-items:center;gap:12px}
+  .bar-word{
+    width:96px;flex:0 0 96px;text-align:right;
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;color:#e9e4d8;
+  }
+  .bar-track{flex:1;background:rgba(255,255,255,.08);border-radius:5px;height:24px;position:relative;overflow:hidden}
+  .bar-fill{height:100%;background:#7fae9c;border-radius:5px 0 0 5px;transition:width .35s cubic-bezier(.2,.7,.2,1)}
+  .bar-row.win .bar-fill{background:var(--hot)}
+  .bar-row.win .bar-word{color:#fff;font-weight:700}
+  .bar-pct{
+    width:58px;flex:0 0 58px;font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:13px;color:#c8c2b4;
+  }
+  .verdict{margin-top:22px;font-size:16px;color:#f3efe6}
+  .verdict b{color:#fff}
+  .verdict .word{color:var(--hot);background:#f6e6dc;padding:1px 9px;border-radius:5px;font-weight:700}
+
+  .honest{
+    margin-top:26px;background:var(--hot-bg);border:1px solid #e3c4b2;
+    border-radius:10px;padding:16px 18px;font-size:14.5px;color:#5e3922;max-width:70ch;
+  }
+  .honest b{color:var(--hot)}
+
+  .posctl{display:flex;gap:8px;align-items:center;margin:14px 0 0;font-size:14px;color:var(--muted)}
+  .posctl select{
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;padding:5px 8px;
+    border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);
+  }
+  footer{margin-top:60px;border-top:1px solid var(--line);padding-top:20px;font-size:13px;color:var(--muted)}
+  @media (max-width:560px){
+    .cell{width:58px;font-size:11px}
+    .rlabel{width:46px;flex-basis:46px}
+    .bar-word{width:74px;flex-basis:74px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">A transformer with nothing hidden</div>
+    <h1>Watch a model guess the next word, <em>one number at a time</em></h1>
+    <p class="lede">This is a complete transformer, the same machinery behind ChatGPT, shrunk until every single number fits on screen. It reads four words and predicts what comes next.</p>
+    <p class="lede small">Teal cells are the model's weights and word vectors: you can edit them. Grey cells are computed and update live. Hit <b>Randomize</b> to scramble the weights and watch the prediction lurch, because with untrained weights, the guess is meaningless. Turning those weights into good ones is exactly what <i>training</i> does, and that's the one thing this page leaves out.</p>
+  </header>
+
+  <div class="controls">
+    <div class="sentence">input:&nbsp; <b id="inputWords">We learnt about the</b> &nbsp;→&nbsp; predicted next word:&nbsp; <span class="pred" id="topPred">…</span></div>
+    <div style="flex:1"></div>
+    <button id="randomBtn">Randomize weights</button>
+    <button class="ghost" id="resetBtn">Reset to saved</button>
+  </div>
+
+  <div class="legend">
+    <span><i class="chip e"></i> editable: weights &amp; word vectors</span>
+    <span><i class="chip c"></i> computed live</span>
+    <span><i class="chip h"></i> the prediction</span>
+  </div>
+
+  <!-- STEP 1: tokens + embeddings -->
+  <section class="step">
+    <div class="step-head"><div class="step-num">1</div><h2>Turn words into vectors</h2></div>
+    <p class="note">Each word in the 6-word dictionary owns a row of <b>3 numbers</b>, its embedding. We look up the four input words, then add a second vector that encodes <i>position</i> (1st word, 2nd word…), so the model knows the order. The sum, <span class="formula">X = word + position</span>, is what the rest of the network actually works on.</p>
+
+    <div class="twocol">
+      <div class="matrix-block">
+        <div class="matrix-label"><b>embedding_table</b>: one row per dictionary word (6 × 3)</div>
+        <div id="embTable"></div>
+      </div>
+      <div class="matrix-block">
+        <div class="matrix-label"><b>position_table</b>: one row per slot (first 4 of 8 shown)</div>
+        <div id="posTable"></div>
+      </div>
+    </div>
+    <div class="matrix-block">
+      <div class="matrix-label"><b>X = embedding + position</b>: the four input tokens, ready for attention (4 × 3)</div>
+      <div id="xTable"></div>
+    </div>
+  </section>
+
+  <!-- STEP 2: Q K V -->
+  <section class="step">
+    <div class="step-head"><div class="step-num">2</div><h2>Project into Query, Key, Value</h2></div>
+    <p class="note">Attention is a soft lookup. We multiply X by three weight matrices to get three different views of each token: <b>Q</b> (what each token searches with), <b>K</b> (what it can be matched on), and <b>V</b> (what it hands over if chosen). The names are a story laid over the math. Underneath, it's just three linear projections: <span class="formula">Q = X·Wq, &nbsp; K = X·Wk, &nbsp; V = X·Wv</span>.</p>
+
+    <div class="twocol">
+      <div class="matrix-block"><div class="matrix-label"><b>Wq</b> (3 × 3)</div><div id="wqTable"></div></div>
+      <div class="matrix-block"><div class="matrix-label"><b>Wk</b> (3 × 3)</div><div id="wkTable"></div></div>
+      <div class="matrix-block"><div class="matrix-label"><b>Wv</b> (3 × 3)</div><div id="wvTable"></div></div>
+    </div>
+    <div class="twocol" style="margin-top:18px">
+      <div class="matrix-block"><div class="matrix-label"><b>Q</b> (4 × 3)</div><div id="qTable"></div></div>
+      <div class="matrix-block"><div class="matrix-label"><b>K</b> (4 × 3)</div><div id="kTable"></div></div>
+      <div class="matrix-block"><div class="matrix-label"><b>V</b> (4 × 3)</div><div id="vTable"></div></div>
+    </div>
+  </section>
+
+  <!-- STEP 3: scores + mask + softmax -->
+  <section class="step">
+    <div class="step-head"><div class="step-num">3</div><h2>Score every token against every other</h2></div>
+    <p class="note">Each query is dot-product-compared with every key, then divided by √3 to keep the numbers tame: <span class="formula">scores = (Q · Kᵀ) / √d</span>. We then <b>mask</b> the upper triangle, a word may only look at itself and the words before it, never ahead. Masked cells are set to −∞ so they vanish in the next step.</p>
+    <div class="matrix-block">
+      <div class="matrix-label">scaled, masked scores. Row = the token doing the looking, column = the token looked at</div>
+      <div id="scoreTable"></div>
+    </div>
+
+    <p class="note" style="margin-top:22px">Softmax turns each row of scores into <b>attention weights</b> that sum to 1, the fraction of attention each token pays to each earlier token. <span class="formula">weights = softmax(row)</span>.</p>
+    <div class="matrix-block">
+      <div class="matrix-label">attention weights (each row sums to 1)</div>
+      <div id="weightTable"></div>
+    </div>
+  </section>
+
+  <!-- STEP 4: attn out -->
+  <section class="step">
+    <div class="step-head"><div class="step-num">4</div><h2>Blend the values</h2></div>
+    <p class="note">Each token builds its new, context-aware vector by taking a weighted average of the Value vectors, using the attention weights from step 3: <span class="formula">attn_out = weights · V</span>. This is the moment information actually moves <i>between</i> positions.</p>
+    <div class="matrix-block">
+      <div class="matrix-label"><b>attn_out</b>: context-mixed tokens (4 × 3)</div>
+      <div id="attnTable"></div>
+    </div>
+  </section>
+
+  <!-- STEP 5: MLP -->
+  <section class="step">
+    <div class="step-head"><div class="step-num">5</div><h2>Think it over (the feed-forward network)</h2></div>
+    <p class="note">Now each token is processed on its own by an ordinary little neural network: widen from 3 to 12, apply ReLU (negatives become 0), then narrow back to 3. <span class="formula">mlp_out = ReLU(attn_out·W1 + b1) · W2 + b2</span>. This is the classic "neurons and layers" network, it lives inside every transformer block.</p>
+    <div class="matrix-block">
+      <div class="matrix-label">hidden layer after ReLU, <b>h</b> (4 × 12), the 12 "neurons" per token</div>
+      <div id="hTable"></div>
+    </div>
+    <div class="matrix-block" style="margin-top:18px">
+      <div class="matrix-label"><b>mlp_out</b>: back down to 3 per token (4 × 3)</div>
+      <div id="mlpTable"></div>
+    </div>
+  </section>
+
+  <!-- STEP 6: logits + softmax -->
+  <section class="step">
+    <div class="step-head"><div class="step-num">6</div><h2>Score the whole dictionary</h2></div>
+    <p class="note">Finally we project each token's 3 numbers up to <b>6 logits</b>, one raw score per dictionary word, using the unembedding matrix: <span class="formula">logits = mlp_out · unembed</span>. Softmax turns each row into a probability distribution over the next word.</p>
+    <div class="matrix-block"><div class="matrix-label"><b>unembed</b> (3 → 6)</div><div id="unembedTable"></div></div>
+    <div class="matrix-block" style="margin-top:16px">
+      <div class="matrix-label">next-word probabilities, one row per input position (each row sums to 1)</div>
+      <div id="probTable"></div>
+    </div>
+  </section>
+
+  <!-- PREDICTION -->
+  <section class="predict">
+    <h2>The prediction</h2>
+    <p class="sub">Reading the row for a chosen position, here is the model's probability for each possible next word. The tallest bar is its guess.</p>
+    <div class="posctl">
+      after the word:
+      <select id="posSelect">
+        <option value="0">We (position 1)</option>
+        <option value="1">learnt (position 2)</option>
+        <option value="2" selected>about (position 3)</option>
+        <option value="3">the (position 4)</option>
+      </select>
+    </div>
+    <div class="bars" id="bars" style="margin-top:18px"></div>
+    <div class="verdict" id="verdict"></div>
+    <div class="honest">
+      <b>Why is the guess usually nonsense?</b> Because these weights are random. A real model's weights are slowly shaped by <i>training</i> on billions of words until predictions like this become accurate. Everything above is the <i>forward pass</i>, how a prediction is computed. Training, the part that makes the numbers <i>good</i>, is the bigger story this page deliberately leaves out.
+    </div>
+  </section>
+
+  <footer>
+    A single attention head, a single block, 6-word vocabulary, 3-dimensional embeddings. The exact same shapes scale up (more heads, wider vectors, dozens of blocks, tens of thousands of words) to become the models you use every day. Built from a hand-verified spreadsheet of the same network.
+    <p style="margin:16px 0 0"><b style="color:var(--ink)">Lesson two, backward propagation, coming soon.</b> This page shows the forward pass: how a prediction is computed. Next comes the other half: how the model <i>learns</i>, watching the gradients flow back and nudge every weight.</p>
+    <p style="margin:14px 0 0">Made by Daniel Gochin, a 25-year software engineer learning how language models work from the matrix multiplications up.</p>
+  </footer>
+</div>
+
+<script>
+"use strict";
+const VOCAB = ["We","learnt","about","the","Transformer","here"];
+const INPUT = [0,1,2,3];           // "We learnt about the"
+const D = 3, H = 12, N = 4, VS = 6;
+
+// ---- saved (trained-looking) weights, lifted exactly from the spreadsheet ----
+const SAVED = {
+  embedding_table: [[0.497,-0.138,0.648],[1.523,-0.234,-0.234],[1.159,0.767,-0.469],[0.543,-0.463,-0.466],[0.242,-1.913,-1.725],[-0.562,-1.013,0.314]],
+  position_table: [[-0.908,-1.412,1.466],[-0.226,0.068,-1.425],[-0.544,0.111,-1.151],[0.376,-0.601,-0.292],[-0.602,1.852,-0.013],[-1.058,0.823,-1.221],[0.209,-1.96,-1.328],[0.197,0.738,0.171]],
+  Wq: [[-0.645,0.361,1.538],[-0.036,1.565,-2.62],[0.822,0.087,-0.299]],
+  Wk: [[0.092,-1.988,-0.22],[0.357,1.478,-0.518],[-0.808,-0.502,0.915]],
+  Wv: [[0.329,-0.53,0.513],[0.097,0.969,-0.702],[-0.328,-0.392,-1.464]],
+  W1: [[0.714,0.416,0.974,-1.015,-0.597,-0.873,-0.667,-0.462,0.854,-0.892,0.803,-0.737],
+       [-0.737,-0.374,0.940,0.484,-0.299,1.654,0.338,0.826,-1.169,-1.374,-1.047,-1.172],
+       [-0.648,-1.128,-0.166,-0.342,-0.873,-0.673,0.601,-0.495,-1.307,1.495,-0.194,0.245]],
+  b1: [0.082,1.700,0.147,0.577,-0.135,-0.514,-0.706,-0.463,0.956,-1.093,-1.052,-0.355],
+  W2: [[-0.794,-1.496,-0.777],[-0.443,-0.140,-0.246],[1.664,-0.245,0.043],[-1.145,0.632,0.953],
+       [1.526,-1.652,-0.306],[2.467,0.428,-0.081],[-0.058,1.114,-1.707],[0.670,0.732,0.359],
+       [0.075,-1.684,-0.921],[-0.130,-0.613,2.348],[-1.943,-1.095,0.413],[-1.203,0.229,1.240]],
+  b2: [-0.765,0.841,1.112],
+  unembed: [[1.630,0.179,-0.343,-1.621,1.016,0.147],[1.190,-0.396,0.601,-0.174,-0.663,0.436],[2.231,-0.195,0.720,-0.052,-0.182,-1.466]]
+};
+
+// ---- live state (deep copy of saved) ----
+let W = structuredClone(SAVED);
+
+// ---- math helpers ----
+function mm(A,B){const out=[];for(let i=0;i<A.length;i++){out[i]=[];for(let j=0;j<B[0].length;j++){let s=0;for(let k=0;k<B.length;k++)s+=A[i][k]*B[k][j];out[i][j]=s;}}return out;}
+const T=A=>A[0].map((_,j)=>A.map(r=>r[j]));
+function softmax(row){const m=Math.max(...row);const ex=row.map(v=>Math.exp(v-m));const s=ex.reduce((a,b)=>a+b,0);return ex.map(e=>e/s);}
+
+// ---- forward pass (identical to the verified spreadsheet) ----
+let F = {};
+function forward(){
+  const X = INPUT.map((tok,i)=>W.embedding_table[tok].map((e,j)=>e + W.position_table[i][j]));
+  const Q = mm(X,W.Wq), K = mm(X,W.Wk), V = mm(X,W.Wv);
+  let scores = mm(Q,T(K)).map(r=>r.map(v=>v/Math.sqrt(D)));
+  // causal mask
+  const masked = scores.map((r,i)=>r.map((v,j)=> j>i ? -1e9 : v));
+  const weights = masked.map(softmax);
+  const attn = mm(weights,V);
+  let h = mm(attn,W.W1).map(r=>r.map((v,j)=>Math.max(0, v + W.b1[j])));
+  let mlp = mm(h,W.W2).map(r=>r.map((v,j)=>v + W.b2[j]));
+  const logits = mm(mlp,W.unembed);
+  const probs = logits.map(softmax);
+  F = {X,Q,K,V,scores:masked,weights,attn,h,mlp,logits,probs};
+}
+
+// ---- rendering ----
+const fmt=v=> (v===-1e9 ? "−∞" : (Math.abs(v)<0.0005?"0":v.toFixed(3)));
+function el(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e;}
+
+function renderEditable(container, mat, key, rowLabels){
+  container.innerHTML="";
+  mat.forEach((row,i)=>{
+    const rdiv=el("div","matrix-row");
+    if(rowLabels)rdiv.appendChild(el("div","rlabel",rowLabels[i]));
+    const g=el("div","grid");g.style.gridTemplateColumns=`repeat(${row.length},auto)`;
+    row.forEach((val,j)=>{
+      const inp=document.createElement("input");
+      inp.className="cell editable";inp.value=val.toFixed(3);
+      inp.type="text";inp.spellcheck=false;
+      inp.setAttribute("aria-label",`${key} row ${i+1} col ${j+1}`);
+      inp.addEventListener("change",()=>{
+        const num=parseFloat(inp.value);
+        if(!isNaN(num)){ W[key][i][j]=num; recompute(); }
+        else inp.value=W[key][i][j].toFixed(3);
+      });
+      g.appendChild(inp);
+    });
+    rdiv.appendChild(g);
+    container.appendChild(rdiv);
+  });
+}
+function renderEditableVec(container, vec, key){
+  container.innerHTML="";
+  const rdiv=el("div","matrix-row");
+  const g=el("div","grid");g.style.gridTemplateColumns=`repeat(${vec.length},auto)`;
+  vec.forEach((val,j)=>{
+    const inp=document.createElement("input");
+    inp.className="cell editable";inp.value=val.toFixed(3);inp.type="text";inp.spellcheck=false;
+    inp.addEventListener("change",()=>{const n=parseFloat(inp.value);if(!isNaN(n)){W[key][j]=n;recompute();}else inp.value=W[key][j].toFixed(3);});
+    g.appendChild(inp);
+  });
+  rdiv.appendChild(g);container.appendChild(rdiv);
+}
+
+function renderCalc(container, mat, opts={}){
+  container.innerHTML="";
+  const {rowLabels,colLabels,maskTri,hotCell}=opts;
+  if(colLabels){
+    const rdiv=el("div","matrix-row");
+    if(rowLabels)rdiv.appendChild(el("div","rlabel",""));
+    const g=el("div","grid");g.style.gridTemplateColumns=`repeat(${colLabels.length},auto)`;
+    colLabels.forEach(c=>g.appendChild(el("div","cell colhead",c)));
+    rdiv.appendChild(g);container.appendChild(rdiv);
+  }
+  mat.forEach((row,i)=>{
+    const rdiv=el("div","matrix-row");
+    if(rowLabels)rdiv.appendChild(el("div","rlabel",rowLabels[i]));
+    const g=el("div","grid");g.style.gridTemplateColumns=`repeat(${row.length},auto)`;
+    row.forEach((val,j)=>{
+      const c=el("div","cell",fmt(val));
+      if(maskTri && j>i)c.classList.add("masked");
+      if(hotCell && hotCell[0]===i && hotCell[1]===j)c.classList.add("hot");
+      g.appendChild(c);
+    });
+    rdiv.appendChild(g);container.appendChild(rdiv);
+  });
+}
+
+const TOKLAB = INPUT.map((t,i)=>VOCAB[t]);
+function renderAll(){
+  // editable
+  renderEditable(document.getElementById("embTable"), W.embedding_table, "embedding_table", VOCAB);
+  renderEditable(document.getElementById("posTable"), W.position_table.slice(0,4), "position_table", ["pos 1","pos 2","pos 3","pos 4"]);
+  renderEditable(document.getElementById("wqTable"), W.Wq, "Wq");
+  renderEditable(document.getElementById("wkTable"), W.Wk, "Wk");
+  renderEditable(document.getElementById("wvTable"), W.Wv, "Wv");
+  renderEditable(document.getElementById("unembedTable"), W.unembed, "unembed");
+  // computed
+  renderCalc(document.getElementById("xTable"), F.X, {rowLabels:TOKLAB});
+  renderCalc(document.getElementById("qTable"), F.Q, {rowLabels:TOKLAB});
+  renderCalc(document.getElementById("kTable"), F.K, {rowLabels:TOKLAB});
+  renderCalc(document.getElementById("vTable"), F.V, {rowLabels:TOKLAB});
+  renderCalc(document.getElementById("scoreTable"), F.scores, {rowLabels:TOKLAB,colLabels:TOKLAB,maskTri:true});
+  renderCalc(document.getElementById("weightTable"), F.weights, {rowLabels:TOKLAB,colLabels:TOKLAB,maskTri:true});
+  renderCalc(document.getElementById("attnTable"), F.attn, {rowLabels:TOKLAB});
+  renderCalc(document.getElementById("hTable"), F.h, {rowLabels:TOKLAB});
+  renderCalc(document.getElementById("mlpTable"), F.mlp, {rowLabels:TOKLAB});
+  renderCalc(document.getElementById("probTable"), F.probs, {rowLabels:TOKLAB,colLabels:VOCAB});
+  renderBars();
+  renderTopPred();
+}
+
+function renderTopPred(){
+  // prediction after the final input word (position 3 = "the")
+  const row=F.probs[N-1];
+  const idx=row.indexOf(Math.max(...row));
+  document.getElementById("topPred").textContent=VOCAB[idx];
+}
+
+function renderBars(){
+  const pos=parseInt(document.getElementById("posSelect").value,10);
+  const row=F.probs[pos];
+  const max=Math.max(...row);
+  const winIdx=row.indexOf(max);
+  const bars=document.getElementById("bars");bars.innerHTML="";
+  row.forEach((p,j)=>{
+    const r=el("div","bar-row"+(j===winIdx?" win":""));
+    r.appendChild(el("div","bar-word",VOCAB[j]));
+    const track=el("div","bar-track");
+    const fill=el("div","bar-fill");fill.style.width=(p*100).toFixed(1)+"%";
+    track.appendChild(fill);r.appendChild(track);
+    r.appendChild(el("div","bar-pct",(p*100).toFixed(1)+"%"));
+    bars.appendChild(r);
+  });
+  const v=document.getElementById("verdict");
+  v.innerHTML=`After <b>${VOCAB[INPUT[pos]]}</b>, the model's next-word guess is <span class="word">${VOCAB[winIdx]}</span> &nbsp;(${(max*100).toFixed(1)}% confident).`;
+}
+
+function recompute(){forward();renderAll();}
+
+// ---- randomize / reset ----
+function randn(){ // Box-Muller
+  let u=0,v=0;while(u===0)u=Math.random();while(v===0)v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+function randomizeMat(m){return m.map(r=>Array.isArray(r)?r.map(()=>+(randn()).toFixed(3)):+(randn()).toFixed(3));}
+function randomize(){
+  for(const k of Object.keys(W)){
+    if(Array.isArray(W[k][0])) W[k]=randomizeMat(W[k]);
+    else W[k]=W[k].map(()=>+(randn()).toFixed(3));
+  }
+  recompute();
+}
+function reset(){W=structuredClone(SAVED);recompute();}
+
+document.getElementById("randomBtn").addEventListener("click",randomize);
+document.getElementById("resetBtn").addEventListener("click",reset);
+document.getElementById("posSelect").addEventListener("change",()=>{renderBars();});
+
+// ---- go ----
+forward();renderAll();
+</script>
+</body>
+</html>
