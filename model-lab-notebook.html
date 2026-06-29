@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Model Lab Notebook</title>
+<style>
+  :root {
+    --ink:        #14161b;   /* deep slate background */
+    --ink-2:      #1b1e25;   /* raised surface */
+    --ink-3:      #23262f;   /* card */
+    --line:       #2c2f39;   /* hairlines */
+    --line-soft:  #21242c;
+    --text:       #e9e6df;   /* warm off-white prose */
+    --text-dim:   #9b968c;   /* captions, labels */
+    --text-faint: #6f6a62;
+    --trapped:    #e0883c;   /* low entropy / on rails / the well */
+    --trapped-2:  #c96f33;
+    --open:       #57b0ae;   /* high entropy / real choices */
+    --open-2:     #6fc0be;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--text);
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---- masthead ---- */
+  header.masthead {
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #16181e 0%, var(--ink) 100%);
+  }
+  .masthead .wrap { padding-top: 40px; padding-bottom: 34px; }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin: 0 0 18px;
+  }
+  .masthead h1 {
+    font-size: clamp(30px, 6vw, 46px);
+    line-height: 1.08;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin: 0 0 14px;
+  }
+  .masthead p.lede {
+    color: var(--text-dim);
+    font-size: 19px;
+    margin: 0 0 26px;
+    max-width: 60ch;
+  }
+  .spec {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .spec span {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 4px 11px;
+    color: var(--text-dim);
+    background: var(--ink-2);
+  }
+  .spec span b { color: var(--text); font-weight: 600; }
+
+  /* ---- entry ---- */
+  main .wrap { padding-top: 52px; padding-bottom: 80px; }
+
+  .entry-tag {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--trapped);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 16px;
+  }
+  .entry-tag::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+
+  h2.entry-title {
+    font-size: clamp(26px, 5vw, 36px);
+    line-height: 1.12;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 20px;
+  }
+  .thesis {
+    font-size: 21px;
+    line-height: 1.55;
+    color: var(--text);
+    border-left: 2px solid var(--trapped);
+    padding-left: 20px;
+    margin: 0 0 44px;
+  }
+
+  /* ---- signature: entropy strip ---- */
+  figure.strip {
+    margin: 0 0 16px;
+    background: var(--ink-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 22px 20px 16px;
+  }
+  .strip-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .strip-head .t {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .scale {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-faint);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .scale .bar {
+    width: 96px; height: 8px; border-radius: 4px;
+    background: linear-gradient(90deg, var(--trapped), var(--open));
+  }
+  #plot {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 150px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .cell { flex: 1 0 16px; display: flex; flex-direction: column; align-items: center; min-width: 16px; }
+  .cell .col {
+    width: 100%;
+    border-radius: 2px 2px 0 0;
+    transition: opacity .15s;
+  }
+  .cell .lbl {
+    font-family: var(--mono);
+    font-size: 8.5px;
+    color: var(--text-faint);
+    margin-top: 5px;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    white-space: nowrap;
+    max-height: 46px;
+    overflow: hidden;
+  }
+  .strip-axis {
+    display: flex; justify-content: space-between;
+    font-family: var(--mono); font-size: 10px; color: var(--text-faint);
+    border-top: 1px solid var(--line-soft);
+    margin-top: 6px; padding-top: 8px;
+  }
+  figcaption {
+    font-size: 15px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin-top: 14px;
+  }
+  figcaption b { color: var(--text); font-weight: 600; }
+  .amber { color: var(--trapped); }
+  .teal  { color: var(--open); }
+
+  /* ---- finding sections ---- */
+  section.finding { margin-top: 52px; }
+  .finding > .lede-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin: 0 0 8px;
+  }
+  .finding h3 {
+    font-size: 23px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    margin: 0 0 14px;
+    line-height: 1.2;
+  }
+  .finding p { margin: 0 0 16px; }
+  .finding p:last-child { margin-bottom: 0; }
+
+  code, .m {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--ink-3);
+    border: 1px solid var(--line-soft);
+    border-radius: 4px;
+    padding: 1px 6px;
+    color: var(--open-2);
+  }
+  .finding .formula {
+    font-family: var(--mono);
+    font-size: 15px;
+    text-align: center;
+    color: var(--text);
+    background: var(--ink-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px;
+    margin: 22px 0;
+  }
+  .finding .formula .note { display:block; color: var(--text-faint); font-size: 12px; margin-top: 8px; }
+
+  /* ---- concept glossary ---- */
+  .concepts { margin-top: 64px; }
+  .concepts .grid { display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); border-radius: 10px; overflow: hidden; }
+  .concepts dt {
+    background: var(--ink-2);
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--open-2);
+    padding: 16px 18px 6px;
+    font-weight: 600;
+  }
+  .concepts dd {
+    background: var(--ink-2);
+    margin: 0;
+    padding: 0 18px 18px;
+    font-size: 16px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  /* ---- open questions ---- */
+  .open { margin-top: 64px; }
+  .open ul { list-style: none; padding: 0; margin: 0; }
+  .open li {
+    border-left: 2px solid var(--open);
+    padding: 4px 0 4px 18px;
+    margin-bottom: 18px;
+    color: var(--text-dim);
+    font-size: 16.5px;
+  }
+  .open li b { color: var(--text); font-weight: 600; font-family: inherit; }
+
+  /* ---- shared section heading ---- */
+  .sec-head {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--trapped);
+    display: flex; align-items: center; gap: 12px;
+    margin: 0 0 22px;
+  }
+  .sec-head::after { content:""; flex:1; height:1px; background: var(--line); }
+
+  /* ---- raw evidence ---- */
+  .evidence { margin-top: 64px; }
+  .evidence-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 760px) { .evidence-grid { grid-template-columns: 1fr; } }
+  .readout {
+    background: var(--ink-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .readout .rhead {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .readout .rhead .tag { color: var(--text-faint); }
+  .passage {
+    padding: 18px;
+    font-size: 14.5px;
+    line-height: 1.62;
+    color: var(--text-dim);
+    max-height: 470px;
+    overflow: auto;
+  }
+  .passage p { margin: 0 0 12px; }
+  .passage p:last-child { margin-bottom: 0; }
+  .passage .prompt { color: var(--open-2); font-weight: 600; }
+  .passage mark.spiral {
+    background: rgba(224,136,60,0.16);
+    color: var(--text);
+    border-radius: 2px;
+    padding: 0 1px;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+  pre.proberaw {
+    margin: 0;
+    padding: 14px 16px;
+    font-family: var(--mono);
+    font-size: 10px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    white-space: pre;
+    overflow: auto;
+    max-height: 470px;
+  }
+  .evidence .cap { font-size: 15px; color: var(--text-dim); margin-top: 16px; line-height: 1.5; }
+  .evidence .cap b { color: var(--text); font-weight: 600; }
+  .evidence .cap .amber { color: var(--trapped); }
+
+  footer {
+    border-top: 1px solid var(--line);
+    margin-top: 72px;
+  }
+  footer .wrap { padding: 28px 24px 56px; }
+  footer p { font-size: 14px; color: var(--text-faint); margin: 0 0 8px; font-family: var(--mono); }
+  footer .how { font-family: var(--serif); font-size: 15px; color: var(--text-dim); line-height: 1.55; }
+
+  a { color: var(--open-2); }
+  :focus-visible { outline: 2px solid var(--open); outline-offset: 3px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <p class="kicker">Model Lab Notebook</p>
+    <h1>Field notes from inside a small transformer</h1>
+    <p class="lede">A running record of what I learn training language models from scratch on my own machine. Each entry is one thing I figured out, written down before I forget it.</p>
+    <div class="spec">
+      <span><b>ctx</b> 512</span>
+      <span><b>E</b> 512 <b>H</b> 8 <b>L</b> 8</span>
+      <span><b>params</b> 43.9M</span>
+      <span><b>tokens</b> 32.9M</span>
+      <span><b>vocab</b> 36k</span>
+      <span><b>RTX</b> 4060 Ti</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <p class="entry-tag">Entry 01 &middot; 29 June 2026</p>
+    <h2 class="entry-title">The model writes fluently about nothing, and I can measure why</h2>
+    <p class="thesis">Every sentence it produces is grammatical. Whole paragraphs hold together. Then it falls into a loop, repeating clothing or repeating tense dialogue, and never escapes. The loop is not a glitch. It is the clearest sign of what the model has and has not learned.</p>
+
+    <!-- SIGNATURE: entropy strip from real probe data -->
+    <figure class="strip">
+      <div class="strip-head">
+        <span class="t">Next-token entropy, one bar per generated token</span>
+        <span class="scale"><span class="amber">trapped</span><span class="bar"></span><span class="teal">open</span></span>
+      </div>
+      <div id="plot" role="img" aria-label="A row of bars showing next-token entropy. Tall teal bars mark open choices, short amber bars mark the repeating loop spine where the model is forced."></div>
+      <div class="strip-axis"><span>prompt: &ldquo;Gatsby turned to Donald and said,&rdquo;</span><span id="span-label"></span></div>
+      <figcaption>
+        Each bar is one token the model generated. Height and colour show <b>entropy</b>: how many real choices it had at that step. Tall <span class="teal">teal</span> bars are open decisions. Short <span class="amber">amber</span> bars are the loop spine, where having said &ldquo;I&rsquo;m not&rdquo; the model is almost certain the next word is &ldquo;sure&rdquo;. Watch the amber bars repeat. That is the model on rails, saying the same hedge again and again.
+      </figcaption>
+    </figure>
+
+    <section class="finding">
+      <p class="lede-tag">Finding A</p>
+      <h3>Longer context raised the ceiling, it did not remove it</h3>
+      <p>Going from 256 to 512 context did what it was meant to do. The model now holds a scene for five or six sentences before it drifts, up from about two. A detective walks in, speaks in character, a door opens, a woman enters, and all of that stays consistent. That is a real, measured gain on the exact axis I was aiming at.</p>
+      <p>But the drift still arrives. The deeper limit is not how far back the model can see. It is how much of what it sees it can <em>use</em>. At 44M parameters it can read its own last 500 words but cannot treat them as binding facts. Seeing is not the same as enforcing consistency, and enforcement is what more parameters buy.</p>
+    </section>
+
+    <section class="finding">
+      <p class="lede-tag">Finding B</p>
+      <h3>It falls into register wells, and which one depends on the prompt</h3>
+      <p>The model has learned the <em>texture</em> of each kind of writing extremely well: the clipped rhythm of a character description, the cadence of a tense standoff. But it has no underlying state, no model of who the person is or what the argument is about. So once it enters a register it runs out of real things to say almost at once, and circles that register&rsquo;s most common phrases forever.</p>
+      <p>Describe a person and it spirals on clothing: <span class="m">a black suit, maybe a T-shirt, a blue tie, a grey shirt</span>, never committing to one outfit because it is sampling the clothes sentence by sentence rather than remembering them. Put two people in a room and it spirals on dialogue: <span class="m">I&rsquo;m not sure you&rsquo;re going to do anything to me</span>, repeated with small variations. Same disease, different room.</p>
+    </section>
+
+    <section class="finding">
+      <p class="lede-tag">Finding C</p>
+      <h3>Entropy turns the loop into a number I can watch</h3>
+      <p>At every step the model gives a probability to all 36,000 tokens. Entropy summarises how spread out that is, in bits. The useful trick: two to the power of the entropy is roughly how many real choices the model has.</p>
+      <div class="formula">
+        entropy = &minus; &Sigma; p &middot; log&#8322;(p)
+        <span class="note">0 bits = 1 forced choice &nbsp;&middot;&nbsp; 1 bit = 2 choices &nbsp;&middot;&nbsp; 2.6 bits &asymp; 6 choices</span>
+      </div>
+      <p>The loop is not uniformly certain. It alternates. The <span class="amber">spine</span> of each repeated phrase collapses toward zero entropy (going&rarr;to&rarr;do&rarr;anything&rarr;to&rarr;me, each near one forced choice). Between repeats there are <span class="teal">forks</span> at 2 to 3 bits where the model truly has five or six options. The trap is that all five or six lead back into the same register. Real freedom, futile freedom: six doors, same room.</p>
+      <p>And it tightens as it runs. Each completed phrase enters the recent context, which makes the model even surer the same phrase comes next, so the spine entropy drops further every lap. The model digs its own groove deeper as it goes.</p>
+    </section>
+
+    <section class="finding">
+      <p class="lede-tag">Finding D</p>
+      <h3>Why it picks one well over another: the first few tokens decide</h3>
+      <p>The model never chooses a topic for the whole passage. It only ever predicts the next token from the recent ones. So the well it lands in is set by what the last sentence happened to be, not by the prompt as a whole.</p>
+      <p>In the runs that spiralled on clothing, an early line introduced a person standing there, and in thriller prose a person appearing is followed by a description, so it fell toward clothing. In the run that spiralled on dialogue, the early tokens opened a quote before anyone got described, so it fell toward standoff filler instead. A small, semi-random early choice sends the ball down one slope. Same prompt, different seed, different well. The prompt nudges the starting position; the first half-dozen tokens pick the low point it rolls into.</p>
+    </section>
+
+    <section class="finding">
+      <p class="lede-tag">Finding E &middot; the root</p>
+      <h3>Form without content, sharpened by a thriller-heavy corpus</h3>
+      <p>This is the same gap I keep meeting, now visible as numbers. A human writing dialogue holds the unstated thing underneath: someone wants something, something is at stake, and every line moves it. The model holds the <em>sound</em> of tense dialogue with nothing underneath for the lines to be about, so the lines cannot advance anything. They resonate in place. The grammar is flawless; the text is about nothing; therefore it cannot progress.</p>
+      <p>The corpus makes it worse. Heavy on modern thrillers (ten Reacher books, plus DeMille, Cussler, Patterson), the data taught &ldquo;describe a person&rdquo; to mean &ldquo;list clothing in clipped fragments&rdquo; and &ldquo;two people talk&rdquo; to mean &ldquo;trade tense one-liners&rdquo; more strongly than a balanced corpus would. The model learned those grooves too well and over-applies them. The repetition penalty cannot fix it, because the penalty works on exact tokens while the loop is semantic: it just finds a near-synonym of the same hedge.</p>
+    </section>
+
+    <!-- raw evidence -->
+    <section class="evidence">
+      <p class="sec-head">The raw output</p>
+      <div class="evidence-grid">
+
+        <div class="readout">
+          <div class="rhead"><span>generated passage</span><span class="tag">generate_big.py &middot; 300 tok</span></div>
+          <div class="passage">
+            <p><span class="prompt">The detective walked into the room and</span> looked at his watch. &ldquo;I&rsquo;m not going to let you go, Mr. Taylor,&rdquo; he said. &ldquo;He&rsquo;s going to put me in the office.&rdquo; He turned back to Reacher. The door opened and a woman stepped out from behind him. <mark class="spiral">She was wearing a black dress with a red bra. Her hair was dark brown. It had a long gray face. There were a small blue eyes that showed no signs of surprise. They were all white. The woman wore her white pants and a black leather dress. A black suit and a black shirt like this one. She was wearing a pair of shoes and an old T-shirt that looked like it had been worn by some kind of a movie.</mark> But she looked like she had been seen in the past few years. I thought maybe she&rsquo;d come up for a while now. Maybe a little too late. Or maybe she might be looking at me. Like she was standing there. And a little bit of an hour later she would have gone out. So I went back into my car and drove away. We left the whole time. Then we got in the car and headed down the street. We pulled off. Pressed over to the sidewalk. Gave the motor running around to the office building. Died up the streets and stopped outside the city gate. Nobody came out. Just waited for us to get out.</p>
+            <p>We arrived at five o&rsquo;clock in the morning. On the way up the stairs</p>
+          </div>
+        </div>
+
+        <div class="readout">
+          <div class="rhead"><span>entropy probe</span><span class="tag">probe_attractor.py &middot; 80 tok</span></div>
+<pre class="proberaw"> tok chosen         entropy  cloth%  top candidates
+------------------------------------------------------------------------------
+   0  "                0.05    0.0%  ":0.99  ':0.01  in:0.00  with:0.00  _:0.00
+   1 I                 1.85    0.0%  I:0.70  You:0.12  We:0.06  This:0.02  That:0.02
+   2 'd                2.13    0.0%  'm:0.67  'll:0.08  have:0.06  don:0.04  've:0.03
+   3  like             0.44    0.0%  like:0.95  better:0.01  have:0.01  be:0.01
+   4  to               0.12    0.0%  to:0.99  you:0.01  a:0.00  it:0.00  that:0.00
+   5  see              1.87    0.0%  see:0.72  get:0.06  know:0.05  be:0.03  go:0.03
+   6  you              1.01    0.0%  you:0.85  the:0.07  a:0.03  him:0.02  your:0.01
+   7 ."                1.94    0.0%  .":0.71  again:0.07  in:0.06  ,:0.03  on:0.03
+   8 \n                0.02    0.0%  _:1.00  He:0.00  She:0.00  Then:0.00  I:0.00
+   9 \n                0.00    0.0%  _:1.00  ":0.00  He:0.00  He:0.00  The:0.00
+  10 "                 0.53    0.0%  ":0.92  I:0.05  He:0.01  The:0.01  She:0.01
+  11 I                 1.81    0.0%  I:0.67  You:0.20  What:0.02  Thank:0.01  Why:0.01
+  12 'm                2.46    0.0%  'm:0.52  'll:0.20  know:0.08  can:0.04  don:0.04
+  13  not              1.82    0.0%  not:0.62  sorry:0.22  going:0.05  sure:0.05
+  14  sure             1.84    0.0%  sure:0.45  going:0.44  a:0.05  the:0.01  .":0.01
+  15  I                2.56    0.0%  I:0.47  you:0.17  what:0.08  if:0.06  ,":0.06
+  16 'm                2.36    0.0%  can:0.52  'm:0.23  'd:0.05  'll:0.04  could:0.04
+  17  not              2.01    0.0%  not:0.55  going:0.31  here:0.03  wrong:0.02  in:0.02
+  18  sure             2.46    0.0%  .":0.30  sure:0.30  going:0.19  .:0.10  ,":0.07
+  19  what             2.60    0.0%  I:0.48  you:0.14  if:0.11  what:0.06  about:0.05
+  20  you              1.25    0.0%  you:0.67  to:0.27  I:0.04  it:0.00  that:0.00
+  21 're               0.58    0.0%  're:0.93  are:0.03  want:0.01  think:0.01  do:0.01
+  22  doing            2.41    0.0%  doing:0.31  talking:0.28  saying:0.16  thinking:0.11
+  23 .                 1.98    0.0%  .":0.51  .:0.19  here:0.18  ,":0.05  ,:0.05
+  24  I                1.15    0.0%  I:0.80  But:0.10  You:0.07  It:0.01  And:0.00
+  25 'm                1.28    0.0%  'm:0.82  'll:0.05  don:0.02  just:0.02  can:0.02
+  26  not              0.69    0.0%  not:0.91  going:0.03  just:0.03  sure:0.02  a:0.00
+  27  sure             0.88    0.0%  sure:0.80  going:0.19  a:0.00  .":0.00  even:0.00
+  28  what             1.88    0.0%  you:0.42  I:0.39  if:0.11  what:0.05  about:0.01
+  29 's                0.48    0.0%  you:0.92  I:0.06  to:0.00  the:0.00  it:0.00
+  30  going            0.35    0.0%  going:0.96  happenin:0.03  in:0.01  coming:0.00
+  31  on               0.53    0.0%  on:0.88  to:0.12  through:0.00  into:0.00  out:0.00
+  32  in               2.52    0.0%  .":0.37  in:0.25  .:0.11  with:0.09  here:0.08
+  33  this             1.99    0.0%  the:0.52  this:0.28  your:0.07  that:0.04  here:0.02
+  34  case             1.32    0.0%  case:0.82  business:0.04  place:0.03  room:0.02
+  35 ."                1.49    0.0%  .":0.45  .:0.40  ,:0.15  is:0.00  and:0.00
+  36 \n                0.01    0.0%  _:1.00  He:0.00  She:0.00  I:0.00  Kate:0.00
+  37 \n                0.00    0.0%  _:1.00  ":0.00  Reacher:0.00  He:0.00  She:0.00
+  38 "                 0.11    0.0%  ":0.99  He:0.00  She:0.00  I:0.00  The:0.00
+  39 I                 1.29    0.0%  I:0.74  You:0.21  What:0.01  It:0.01  That:0.01
+  40 'm                1.05    0.0%  'm:0.85  know:0.04  don:0.04  'll:0.03  can:0.01
+  41  not              0.31    0.0%  not:0.97  sure:0.01  going:0.01  sorry:0.00  just:0.00
+  42  sure             0.85    0.0%  sure:0.84  going:0.14  .":0.01  .:0.00  saying:0.00
+  43  you              2.58    0.0%  I:0.35  you:0.27  what:0.14  if:0.09  .:0.06
+  44  are              0.98    0.0%  're:0.87  are:0.04  can:0.02  'll:0.01  'd:0.01
+  45 ."                1.77    0.0%  .":0.50  .:0.31  ,:0.13  ,":0.04  going:0.02
+  46 \n                0.01    0.0%  _:1.00  He:0.00  She:0.00  I:0.00  The:0.00
+  47 \n                0.00    0.0%  _:1.00  ":0.00  He:0.00  Reacher:0.00  She:0.00
+  48 "                 0.07    0.0%  ":0.99  He:0.00  She:0.00  I:0.00  The:0.00
+  49 I                 0.91    0.0%  I:0.85  You:0.12  No:0.01  That:0.00  What:0.00
+  50 'm                0.63    0.0%  'm:0.92  know:0.03  don:0.02  'll:0.00  can:0.00
+  51  not              0.33    0.0%  not:0.96  sure:0.03  sorry:0.00  just:0.00  going:0.00
+  52  sure             0.49    0.0%  sure:0.94  going:0.04  .":0.01  .:0.01  saying:0.00
+  53 ."                2.18    0.0%  I:0.39  you:0.36  what:0.09  if:0.06  .:0.04
+  54 \n                0.02    0.0%  _:1.00  He:0.00  She:0.00  I:0.00  The:0.00
+  55 \n                0.00    0.0%  _:1.00  ":0.00  He:0.00  Reacher:0.00  He:0.00
+  56 "                 0.07    0.0%  ":0.99  He:0.00  She:0.00  I:0.00  The:0.00
+  57 I                 1.51    0.0%  I:0.52  You:0.42  But:0.01  Why:0.01  What:0.01
+  58 'm                0.64    0.0%  'm:0.92  know:0.04  don:0.02  'll:0.00  can:0.00
+  59  not              0.42    0.0%  not:0.93  sure:0.06  sorry:0.00  just:0.00  going:0.00
+  60  sure             0.29    0.0%  sure:0.97  going:0.02  .":0.01  .:0.01  ,:0.00
+  61  you              2.12    0.0%  you:0.49  I:0.27  what:0.10  if:0.07  .:0.03
+  62 're               1.51    0.0%  're:0.65  are:0.26  have:0.02  can:0.01  would:0.01
+  63  not              2.25    0.0%  going:0.56  not:0.21  right:0.07  wrong:0.04  in:0.02
+  64  going            1.83    0.0%  going:0.56  .":0.25  .:0.14  ,:0.01  sure:0.01
+  65  to               0.01    0.0%  to:1.00  anywhere:0.00  .":0.00  back:0.00  out:0.00
+  66  let              2.36    0.0%  be:0.64  do:0.09  let:0.05  have:0.05  get:0.03
+  67  me               0.15    0.0%  me:0.98  this:0.01  that:0.00  the:0.00  us:0.00
+  68  go               2.60    0.0%  go:0.40  know:0.20  see:0.18  get:0.08  do:0.05
+  69 ."                1.18    0.0%  .":0.72  .:0.23  ,:0.02  to:0.01  into:0.00
+  70 \n                0.01    0.0%  _:1.00  He:0.00  She:0.00  I:0.00  The:0.00
+  71 \n                0.00    0.0%  _:1.00  ":0.00  He:0.00  Reacher:0.00  He:0.00
+  72 "                 0.09    0.0%  ":0.99  He:0.00  She:0.00  The:0.00  I:0.00
+  73 I                 0.98    0.0%  I:0.80  You:0.16  No:0.01  That:0.00  Why:0.00
+  74 'm                0.79    0.0%  'm:0.90  don:0.03  know:0.03  'll:0.02  can:0.01
+  75  not              0.30    0.0%  not:0.96  sure:0.02  going:0.01  sorry:0.00  just:0.00
+  76  sure             1.10    0.0%  sure:0.74  going:0.22  .":0.02  .:0.01  ,:0.00
+  77  you              1.89    0.0%  you:0.49  I:0.35  what:0.05  if:0.05  .":0.02
+  78  are              1.24    0.0%  're:0.78  are:0.15  'll:0.01  can:0.01  will:0.01
+  79 ."                1.45    0.0%  .":0.54  .:0.36  ,:0.07  going:0.02  ,":0.01</pre>
+        </div>
+
+      </div>
+      <p class="cap">Left, a passage from the novel model: the dialogue holds, then the <span class="amber">tinted run</span> is the clothing well, every clause a grammatical garment, no two agreeing. Right, the probe on a different prompt: the same disease in the dialogue register. Read the <code style="font-size:11px">entropy</code> column down the repeated &ldquo;I&rsquo;m / not / sure&rdquo; rows (tokens 49&ndash;52, 58&ndash;60) and watch it fall to <b>0.29</b>, the loop spine on rails. These two runs are why the finding exists.</p>
+
+      <div class="readout" style="margin-top:16px;">
+        <div class="rhead"><span>well triggered on purpose</span><span class="tag">probe_attractor.py &middot; 80 tok</span></div>
+<pre class="proberaw"> prompt: "The detective was wearing his trademark blue jacket"
+
+ tok chosen         entropy  cloth%  top candidates
+------------------------------------------------------------------------------
+   0 .                 1.61    0.0%  ,:0.45  and:0.31  .:0.22  with:0.01  over:0.00
+   1  I                1.62    0.0%  He:0.66  _:0.17  The:0.08  His:0.06  ":0.02
+   2  had              3.00    0.3%  was:0.40  had:0.20  looked:0.14  could:0.09  saw:0.02
+   3  a                2.65    0.0%  a:0.35  the:0.27  no:0.15  seen:0.08  to:0.06
+   4  black            4.77   40.9%  black:0.28  long:0.12  blue:0.04  pair:0.04  suit:0.04   <-- well opens
+   5  suit             2.95   95.3%  T:0.30  suit:0.27  shirt:0.14  leather:0.10  coat:0.06
+   6  and              1.53    0.3%  and:0.71  ,:0.14  .:0.07  with:0.03  in:0.01
+   7  a                0.33    0.6%  a:0.97  I:0.01  the:0.01  my:0.00  an:0.00
+   8  black            2.55   94.4%  black:0.56  blue:0.12  white:0.12  T:0.03  red:0.03
+   9  coat             2.59   97.8%  shirt:0.33  suit:0.31  tie:0.14  T:0.09  jacket:0.04
+  10 .                 2.10    0.1%  .:0.47  and:0.21  ,:0.18  with:0.08  that:0.04
+  11  The              2.07    0.0%  He:0.39  I:0.37  The:0.09  It:0.06  _:0.06
+  12  shirt            2.92   84.3%  suit:0.35  shirt:0.19  jacket:0.14  coat:0.13  guy:0.08
+  13  was              0.08    0.0%  was:0.99  looked:0.00  had:0.00  and:0.00  I:0.00
+  14  a                2.22   15.6%  a:0.70  black:0.07  white:0.04  gray:0.03  the:0.03
+  15  little           3.37   54.5%  black:0.37  little:0.19  long:0.09  gray:0.09  white:0.07
+  16  too              2.45   12.9%  too:0.67  gray:0.06  more:0.05  short:0.03  black:0.02
+  17  big              1.97    1.2%  big:0.69  long:0.08  short:0.06  small:0.05  heavy:0.02
+  18 .                 1.68    0.0%  for:0.53  .:0.31  ,:0.08  and:0.05  to:0.03
+  19  He               2.47    0.0%  I:0.38  It:0.18  The:0.17  He:0.15  _:0.06
+  20  was              1.22    0.7%  was:0.71  had:0.19  looked:0.09  wore:0.01  must:0.00
+  21  wearing          0.94   84.0%  wearing:0.84  a:0.12  dressed:0.01  carrying:0.01  in:0.00
+  22  a                0.22    0.6%  a:0.98  his:0.01  the:0.01  jeans:0.00  an:0.00
+  23  black            3.01   89.9%  black:0.38  white:0.20  suit:0.10  T:0.08  blue:0.06
+  24  suit             1.54   99.1%  suit:0.71  shirt:0.14  T:0.08  tie:0.02  coat:0.01
+  25 .                 1.24    0.0%  .:0.72  and:0.18  ,:0.08  with:0.02  that:0.01
+  26  I                1.28    0.0%  He:0.78  I:0.08  The:0.04  His:0.04  It:0.03
+  27  had              1.80    0.2%  had:0.54  was:0.28  looked:0.09  could:0.05  put:0.00
+  28  a                1.13    0.2%  a:0.80  the:0.13  no:0.04  been:0.01  my:0.00
+  29  white            3.27   85.9%  black:0.44  suit:0.15  white:0.07  blue:0.07  shirt:0.03
+  30  shirt            1.76   99.0%  shirt:0.58  T:0.26  suit:0.08  tie:0.05  coat:0.01
+  31 .                 1.66    0.0%  and:0.61  .:0.24  with:0.05  ,:0.05  in:0.03
+  32  I                2.17    0.0%  He:0.37  I:0.34  The:0.13  It:0.10  _:0.02
+  33  was              1.35    0.1%  had:0.63  was:0.30  looked:0.05  could:0.01  'd:0.00
+  34  wearing          0.37   95.8%  wearing:0.96  a:0.02  carrying:0.01  in:0.00  dressed:0.00
+  35  a                0.59    0.1%  a:0.91  the:0.05  my:0.02  it:0.01  an:0.00
+  36  black            2.76   94.5%  black:0.43  white:0.15  suit:0.14  T:0.10  blue:0.05
+  37  suit             1.57   99.2%  suit:0.69  shirt:0.15  T:0.10  tie:0.02  coat:0.01
+  38 .                 0.77    0.0%  .:0.85  and:0.12  ,:0.02  with:0.01  that:0.00
+  39  I                1.99    0.0%  I:0.56  He:0.15  The:0.14  It:0.09  _:0.04
+  40  was              1.30    0.1%  had:0.56  was:0.39  looked:0.04  could:0.01  wore:0.00
+  41  wearing          0.23   97.5%  wearing:0.98  a:0.01  carrying:0.00  in:0.00  dressed:0.00
+  42  a                0.53    0.1%  a:0.92  the:0.05  my:0.02  it:0.00  an:0.00
+  43  uniform          2.76   94.3%  black:0.42  suit:0.15  white:0.14  T:0.10  blue:0.05
+  44 .                 0.59    0.0%  .:0.89  and:0.09  ,:0.02  with:0.00  that:0.00
+  45  It               1.65    0.0%  I:0.68  The:0.11  He:0.09  It:0.05  _:0.04
+  46  was              0.20    0.0%  was:0.97  looked:0.01  had:0.01  would:0.00  must:0.00
+  47  a                0.83    2.4%  a:0.91  the:0.02  wearing:0.01  black:0.01  like:0.01
+  48  small            3.22   72.3%  black:0.45  white:0.10  long:0.10  gray:0.07  dark:0.04
+  49  leather          2.99   94.0%  black:0.42  white:0.13  gray:0.11  suit:0.09  shirt:0.07
+  50  jacket           0.84   98.8%  jacket:0.88  suit:0.06  shirt:0.02  tie:0.01  coat:0.01
+  51 .                 0.76    0.0%  .:0.87  ,:0.07  with:0.03  and:0.02  that:0.01
+  52  I                2.17    0.0%  I:0.37  It:0.35  The:0.13  He:0.08  There:0.02
+  53  had              1.24    0.1%  had:0.65  was:0.30  looked:0.03  could:0.01  wore:0.00
+  54  a                1.29    0.4%  a:0.80  the:0.09  been:0.05  no:0.03  seen:0.01
+  55  black            3.20   85.1%  black:0.49  white:0.10  blue:0.07  suit:0.07  long:0.04
+  56  T                2.32   98.7%  suit:0.49  shirt:0.19  T:0.14  tie:0.06  coat:0.04
+  57 -                 0.00  100.0%  -:1.00  .:0.00  shirt:0.00  jeans:0.00  and:0.00   <-- 0.00 entropy: forced
+  58 shirt             0.00  100.0%  shirt:1.00  shirts:0.00  white:0.00  coat:0.00  fashione:0.00   <-- on rails
+  59 .                 1.41    0.0%  .:0.56  and:0.38  with:0.02  ,:0.02  in:0.01
+  60  I                1.86    0.0%  I:0.59  It:0.18  The:0.13  He:0.04  A:0.02
+  61  had              1.20    0.1%  had:0.58  was:0.39  looked:0.02  could:0.01  wore:0.00
+  62  a                1.00    0.2%  a:0.85  the:0.08  been:0.03  no:0.02  an:0.01
+  63  black            3.34   86.4%  black:0.45  white:0.09  blue:0.07  suit:0.07  T:0.06
+  64  suit             2.47   98.7%  T:0.33  suit:0.29  shirt:0.21  tie:0.06  jacket:0.04
+  65 .                 1.48    0.3%  .:0.64  and:0.27  in:0.03  with:0.03  ,:0.01
+  66  It               1.69    0.0%  I:0.66  It:0.15  The:0.10  He:0.03  _:0.03
+  67  was              0.22    0.0%  was:0.97  had:0.02  looked:0.01  showed:0.00  would:0.00
+  68  a                0.84    2.4%  a:0.91  the:0.02  white:0.01  like:0.01  wearing:0.01
+  69  gray             3.42   65.2%  black:0.40  long:0.13  white:0.10  gray:0.08  big:0.04
+  70  suit             1.01   99.6%  suit:0.83  shirt:0.07  T:0.06  jacket:0.01  tie:0.00
+  71 .                 0.36    0.0%  .:0.95  and:0.02  ,:0.02  with:0.01  that:0.00
+  72  He               2.02    0.0%  It:0.47  I:0.32  The:0.09  He:0.05  _:0.03
+  73  was              0.98    0.8%  was:0.78  had:0.17  looked:0.04  wore:0.01  must:0.00
+  74  wearing          1.13   75.7%  wearing:0.75  a:0.21  carrying:0.01  dressed:0.01  in:0.00
+  75  a                0.12    0.2%  a:0.99  the:0.00  an:0.00  jeans:0.00  his:0.00
+  76  black            2.95   88.7%  black:0.39  white:0.20  blue:0.08  T:0.07  gray:0.07
+  77  suit             1.30   99.5%  suit:0.76  shirt:0.11  T:0.07  tie:0.02  coat:0.01
+  78 .                 0.40    0.0%  .:0.94  and:0.04  ,:0.01  with:0.00  that:0.00
+  79  He               1.28    0.0%  He:0.77  I:0.11  It:0.05  His:0.03  The:0.03</pre>
+      </div>
+      <p class="cap">The well, triggered on purpose: the prompt ends mid-description, so the model drops straight in. The <code style="font-size:11px">cloth%</code> column is the whole story. Near <b>0%</b> for three tokens, then it jumps to <b class="amber">40.9%</b> at token 4 and stays pinned at <b class="amber">84&ndash;100%</b> for the rest of the run. At tokens 57&ndash;58 (&ldquo;black T<b>-</b><b>shirt</b>&rdquo;) entropy hits <b>0.00</b>: the model has one forced choice, reciting rather than choosing. Across these 80 tokens the same detective wears a black suit, a coat, a white shirt, a uniform, a leather jacket, a T-shirt and a gray suit. Every sentence correct, no two agreeing, because there is no stored fact about the outfit to contradict.</p>
+    </section>
+
+    <!-- glossary -->
+    <section class="concepts">
+      <p class="sec-head">Concepts I am keeping</p>
+      <dl class="grid">
+        <dt>entropy</dt>
+        <dd>The model&rsquo;s own uncertainty about the next token, in bits. Two to the power of it is roughly the number of real choices. Same maths as the training loss, pointed at self-doubt rather than at surprise.</dd>
+        <dt>register well / attractor</dt>
+        <dd>A self-reinforcing loop the model falls into once it enters a kind of writing. There is one per register. The model rolls into whichever is nearest to where the last sentence left it.</dd>
+        <dt>loop spine vs fork</dt>
+        <dd>Spine: the forced, near-zero-entropy backbone of a repeated phrase. Fork: the open, high-entropy gap between repeats whose options all loop back in.</dd>
+        <dt>meaning-shaped hole</dt>
+        <dd>The model learned the form of language (register, rhythm, grammar) without a stable representation of what any of it is about. Fluent, and empty.</dd>
+        <dt>coherence-distance</dt>
+        <dd>How many sentences it holds a thread before drifting. 256 context bought about two. 512 context bought about five or six.</dd>
+      </dl>
+    </section>
+
+    <!-- open questions -->
+    <section class="open">
+      <p class="sec-head">Next experiments</p>
+      <ul>
+        <li><b>TinyStories should cure the loop.</b> Its data is nothing but simple forward-moving plot, with no open-ended description or standoff register to fall into, and a small enough world that a small model can hold it. Prediction: the high-entropy forks start leading to different rooms. Test it by pointing the same entropy probe at a TinyStories model and checking whether the spine-collapse disappears.</li>
+        <li><b>Run the same prompt several times.</b> Sampling is random, so each run takes a different early branch. If it lands in clothing on one run and dialogue on another, that confirms Finding D: the well is chosen by the first few tokens, not the prompt.</li>
+        <li><b>Mixed corpus, books plus a small TinyStories dose.</b> Does easy, coherent narrative scaffold the hard novel prose, raising the floor on everything? Keep the dose small so the books still dominate.</li>
+        <li><b>Backward pass, lesson two.</b> Finish the spreadsheet backprop (softmax Jacobian is the new part), then build the HTML page for the audience already asking for it.</li>
+      </ul>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>// model-lab-notebook.html</p>
+    <p class="how">To add an entry: copy an <code style="font-size:12px">&lt;section class="finding"&gt;</code> block, or a new <code style="font-size:12px">entry-tag</code> + title for a new day. To redraw the strip with a fresh run, paste your <code style="font-size:12px">probe_attractor.py</code> tokens into the <code style="font-size:12px">DATA</code> array in the script below.</p>
+  </div>
+</footer>
+
+<script>
+  // ---- entropy strip data: paste probe_attractor.py output here ----
+  // {t: token text, e: entropy in bits}.  Real slice from the dialogue run.
+  const DATA = [
+    {t:'"',e:0.53},{t:'I',e:1.81},{t:"'m",e:2.46},{t:'not',e:1.82},{t:'sure',e:1.84},
+    {t:'I',e:2.56},{t:"'m",e:2.36},{t:'not',e:2.01},{t:'sure',e:2.46},{t:'what',e:2.60},
+    {t:'you',e:1.25},{t:"'re",e:0.58},{t:'doing',e:2.41},{t:'.',e:1.98},{t:'I',e:1.15},
+    {t:"'m",e:1.28},{t:'not',e:0.69},{t:'sure',e:0.88},{t:'what',e:1.88},{t:"'s",e:0.48},
+    {t:'going',e:0.35},{t:'on',e:0.53},{t:'in',e:2.52},{t:'this',e:1.99},{t:'case',e:1.32},
+    {t:'."',e:1.49},{t:'I',e:0.91},{t:"'m",e:0.64},{t:'not',e:0.42},{t:'sure',e:0.29},
+    {t:'you',e:2.12},{t:"'re",e:1.51},{t:'not',e:2.25},{t:'going',e:1.83},{t:'to',e:0.01}
+  ];
+
+  const EMAX = 2.6;                          // entropy that counts as fully "open"
+  const A = [224,136,60], B = [87,176,174];  // trapped amber -> open teal
+  const mix = (t)=> A.map((a,i)=> Math.round(a + (B[i]-a)*t));
+
+  const plot = document.getElementById('plot');
+  DATA.forEach(d => {
+    const t = Math.max(0, Math.min(1, d.e / EMAX));
+    const [r,g,b] = mix(t);
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.title = `"${d.t}"  entropy ${d.e.toFixed(2)} bits  (~${Math.pow(2,d.e).toFixed(1)} choices)`;
+    const col = document.createElement('div');
+    col.className = 'col';
+    col.style.height = (14 + t*86) + '%';
+    col.style.background = `rgb(${r},${g},${b})`;
+    const lbl = document.createElement('div');
+    lbl.className = 'lbl';
+    lbl.textContent = d.t === '\n' ? '\\n' : d.t;
+    cell.appendChild(col); cell.appendChild(lbl);
+    plot.appendChild(cell);
+  });
+  document.getElementById('span-label').textContent = DATA.length + ' tokens';
+</script>
+
+</body>
+</html>
