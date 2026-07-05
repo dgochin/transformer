@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Building a TinyStories Corpus: Lab Log</title>
+<style>
+  :root{
+    --ink:#1a1c20;
+    --paper:#f6f4ee;
+    --paper-2:#efece3;
+    --line:#d6d1c4;
+    --muted:#6b6656;
+    --keep:#3f7d5c;      /* survived the judge */
+    --cull:#b8503a;      /* culled */
+    --accent:#3454d1;    /* deepseek / the fix */
+    --qwen:#8a6d3b;      /* the local model */
+    --mono:"SFMono-Regular",ui-monospace,"Cascadia Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--serif);
+    line-height:1.6;
+    font-size:18px;
+  }
+  .wrap{max-width:820px;margin:0 auto;padding:0 24px;}
+
+  /* ---- masthead ---- */
+  header{
+    border-bottom:2px solid var(--ink);
+    padding:56px 0 28px;
+  }
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:.22em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin:0 0 18px;
+  }
+  h1{
+    font-size:clamp(34px,6vw,58px);
+    line-height:1.02;
+    margin:0 0 14px;
+    font-weight:600;
+    letter-spacing:-0.02em;
+  }
+  h1 em{font-style:italic;color:var(--accent);}
+  .standfirst{
+    font-size:20px;
+    color:var(--muted);
+    max-width:60ch;
+    margin:0;
+  }
+  .meta-row{
+    display:flex;flex-wrap:wrap;gap:22px;
+    font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;
+    color:var(--muted);
+    margin-top:26px;padding-top:18px;border-top:1px solid var(--line);
+  }
+  .meta-row b{color:var(--ink);font-weight:600;}
+
+  /* ---- section scaffolding ---- */
+  section{padding:46px 0;border-bottom:1px solid var(--line);}
+  .kicker{
+    font-family:var(--mono);
+    font-size:12px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--accent);
+    display:flex;align-items:center;gap:12px;
+    margin:0 0 10px;
+  }
+  .kicker .num{
+    display:inline-grid;place-items:center;
+    width:26px;height:26px;
+    border:1.5px solid var(--accent);border-radius:50%;
+    font-size:12px;
+  }
+  h2{
+    font-size:clamp(26px,4vw,36px);
+    line-height:1.1;margin:0 0 18px;font-weight:600;letter-spacing:-0.01em;
+  }
+  p{margin:0 0 18px;}
+  .lede{font-size:19px;}
+  a{color:var(--accent);}
+
+  /* ---- the quote/story specimen ---- */
+  .specimen{
+    background:var(--paper-2);
+    border:1px solid var(--line);
+    border-left:3px solid var(--cull);
+    padding:20px 22px;
+    font-size:17px;
+    margin:22px 0;
+    border-radius:2px;
+  }
+  .specimen.keep{border-left-color:var(--keep);}
+  .specimen .tag{
+    font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--cull);display:block;margin-bottom:8px;
+  }
+  .specimen.keep .tag{color:var(--keep);}
+  .specimen .why{
+    font-family:var(--mono);font-size:13px;color:var(--muted);
+    margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);
+  }
+
+  /* ---- callout ---- */
+  .lesson{
+    display:flex;gap:14px;
+    background:transparent;
+    border:1px dashed var(--accent);
+    border-radius:4px;
+    padding:16px 18px;margin:22px 0;
+    font-size:16px;
+  }
+  .lesson .mk{font-family:var(--mono);color:var(--accent);font-size:13px;letter-spacing:.1em;flex:none;padding-top:2px;}
+
+  /* ---- stat strip ---- */
+  .stats{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+    background:var(--line);border:1px solid var(--line);
+    margin:26px 0;border-radius:3px;overflow:hidden;
+  }
+  .stat{background:var(--paper);padding:18px 16px;}
+  .stat .n{font-family:var(--mono);font-size:26px;font-weight:600;color:var(--ink);letter-spacing:-.01em;}
+  .stat .n.keep{color:var(--keep);}
+  .stat .n.accent{color:var(--accent);}
+  .stat .l{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:4px;}
+  @media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr);}}
+
+  /* ---- knobs / variation grid ---- */
+  .knobs{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:22px 0;}
+  @media(max-width:640px){.knobs{grid-template-columns:1fr;}}
+  .knob{
+    border:1px solid var(--line);border-radius:4px;padding:16px 18px;background:var(--paper-2);
+  }
+  .knob h4{margin:0 0 6px;font-family:var(--mono);font-size:13px;letter-spacing:.05em;color:var(--ink);text-transform:uppercase;font-weight:600;}
+  .knob p{margin:0;font-size:15px;color:var(--muted);line-height:1.5;}
+  .knob .ex{font-family:var(--mono);font-size:13px;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:3px;padding:6px 8px;margin-top:10px;display:block;}
+
+  /* ---- table ---- */
+  table{width:100%;border-collapse:collapse;margin:22px 0;font-size:15px;}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+  td.mono,th.mono{font-family:var(--mono);}
+  .win{color:var(--keep);font-weight:600;}
+  .lose{color:var(--cull);}
+
+  /* ---- timeline of models ---- */
+  .versus{display:grid;grid-template-columns:1fr auto 1fr;gap:0;align-items:stretch;margin:24px 0;border:1px solid var(--line);border-radius:4px;overflow:hidden;}
+  .versus .side{padding:22px;background:var(--paper-2);}
+  .versus .side.b{background:var(--paper);}
+  .versus .mid{display:grid;place-items:center;background:var(--ink);color:var(--paper);font-family:var(--mono);font-size:12px;letter-spacing:.1em;padding:0 14px;}
+  .versus h4{margin:0 0 4px;font-size:16px;}
+  .versus .sub{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:12px;}
+  .versus ul{margin:0;padding-left:18px;font-size:14.5px;color:var(--muted);}
+  .versus li{margin-bottom:5px;}
+  @media(max-width:640px){.versus{grid-template-columns:1fr;}.versus .mid{padding:8px;}}
+
+  /* ---- error breakdown bars ---- */
+  .bars{margin:20px 0;}
+  .bar-row{display:grid;grid-template-columns:130px 1fr 64px;gap:12px;align-items:center;margin-bottom:10px;font-family:var(--mono);font-size:13px;}
+  .bar-track{background:var(--paper-2);border:1px solid var(--line);border-radius:3px;height:22px;overflow:hidden;}
+  .bar-fill{height:100%;background:var(--cull);opacity:.85;}
+  .bar-row .v{color:var(--muted);text-align:right;}
+
+  footer{padding:46px 0 70px;color:var(--muted);font-family:var(--mono);font-size:13px;}
+  footer .big{font-family:var(--serif);font-size:22px;color:var(--ink);margin-bottom:10px;line-height:1.4;}
+
+  .pull{
+    font-family:var(--serif);font-style:italic;font-size:23px;line-height:1.4;
+    color:var(--ink);border-left:3px solid var(--accent);padding-left:18px;margin:26px 0;
+  }
+  code{font-family:var(--mono);font-size:.86em;background:var(--paper-2);padding:1px 5px;border-radius:3px;border:1px solid var(--line);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="eyebrow">Lab Log · Synthetic Data Pipeline</p>
+    <h1>Teaching a machine to tell a <em>coherent</em> children's story</h1>
+    <p class="standfirst">A build diary: generating a TinyStories-style training corpus, discovering why a local model kept breaking the laws of physics, and moving the work off a rented GPU onto an API that judged 220,000 stories for about eleven dollars.</p>
+    <div class="meta-row">
+      <span><b>Goal</b> · graded story corpus for a small LM</span>
+      <span><b>Levels</b> · L1 "Toddler core" first</span>
+      <span><b>Kept</b> · 206k of 220k judged</span>
+      <span><b>Cost</b> · $40.02 pod + $10.90 API</span>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <p class="kicker"><span class="num">1</span> The problem</p>
+    <h2>Every story was individually fluent and collectively nonsense</h2>
+    <p class="lede">The plan was ordinary: prompt a language model to write thousands of tiny, simple stories, then train a small model on them the way the original TinyStories paper did. The trouble showed up on the very first read-through.</p>
+    <p>The stories parsed. The grammar was fine. But the <em>world</em> inside them was broken in a way that only a careful human reader catches: a chicken sitting in a blanket fort, a table inside a cave, a cup used to "make something to eat." The model was pattern-completing plausible sentences without any model of how objects actually behave.</p>
+
+    <div class="specimen">
+      <span class="tag">Cull · impossible physics</span>
+      "He stretched the hoop to make it smaller. He pulled as hard as he could, and the hoop got smaller and smaller."
+      <div class="why">Stretching makes things bigger. The sentence is fluent; the physics runs backwards.</div>
+    </div>
+
+    <div class="lesson">
+      <span class="mk">LESSON</span>
+      <span>A language model is not a world model. Telling it to "obey physics" adds a phrase it may ignore. It doesn't install the ability to check. You cannot prompt your way out of this class of error; you have to catch it afterwards.</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="kicker"><span class="num">2</span> The generator</p>
+    <h2>Coherence by construction: the knobs we turned</h2>
+    <p class="lede">Rather than let the model freely pair any noun with any action (which is how you get chickens in blanket forts), each story is assembled from a <em>scenario group</em>, a bundle of things that naturally belong together. Then several dials add variety without breaking sense.</p>
+
+    <div class="knobs">
+      <div class="knob">
+        <h4>Scenario groups</h4>
+        <p>24 themed bundles (kitchen &amp; baking, garden, pond, forest…). The noun, setting, and action for one story are all drawn from the <em>same</em> group, so incompatible pairings can't occur.</p>
+        <span class="ex">theme: "pond and stream" → { frog, reed, net… }</span>
+      </div>
+      <div class="knob">
+        <h4>Nouns</h4>
+        <p>The single object a story centres on. Tightened repeatedly to remove "make-able" nouns that lured the model into building things it shouldn't (a plate becoming bakeware, a cloth becoming a boat).</p>
+        <span class="ex">noun: "watering can"</span>
+      </div>
+      <div class="knob">
+        <h4>Settings</h4>
+        <p>Where it happens, bound to the theme so daylight trails don't end up needing lanterns, and cave stories don't hold furniture.</p>
+        <span class="ex">setting: "a flower garden"</span>
+      </div>
+      <div class="knob">
+        <h4>Features &amp; interactions</h4>
+        <p>The one thing that happens. Level 1 features are solo-achievable; anything social ("shares food") was moved to two-character levels so a lone toddler wasn't forced to invent a second child.</p>
+        <span class="ex">feature: "waters a young tree that is still growing"</span>
+      </div>
+      <div class="knob">
+        <h4>Verb &amp; adjective injection</h4>
+        <p>Optional part-of-speech seeds to nudge sentence variety at higher levels without dictating the plot.</p>
+        <span class="ex">verb: null · adjective: null (L1 kept plain)</span>
+      </div>
+      <div class="knob">
+        <h4>Opening-style rotation</h4>
+        <p>The biggest variety fix. Left alone, the model opened <em>every</em> story with the character's name. So a specific opening is drawn per story: a sound, a question, the weather, a line of speech, the time of day, or sometimes the name.</p>
+        <span class="ex">"One frosty morning…" · "Tap, tap went the rain…"</span>
+      </div>
+    </div>
+
+    <p class="pull">Diversity doesn't come from asking the model to be diverse. It comes from varying the input and letting the model render each variation faithfully.</p>
+
+    <div class="lesson">
+      <span class="mk">LESSON</span>
+      <span>Whatever freedom you give a model, it finds a rut inside it. "Vary the opening" → every story name-first. Add a rotation → every <em>sound</em> opening became "Tap, tap, tap" triples. Each rut is fixed the same way: name the variants explicitly and rotate them.</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="kicker"><span class="num">3</span> The judge</p>
+    <h2>Generate fast, check slow</h2>
+    <p class="lede">Scenario design removed whole classes of error at the source, but not all of them. A model handed a slightly awkward pairing still improvises broken physics to reconcile it. So a second model reads every finished story and answers one narrow question: does anything here break physics, logic, or its own premise?</p>
+
+    <p>The rubric grew to five error types, each anchored with a concrete example so the verdict is reproducible rather than vibes-based:</p>
+
+    <table>
+      <thead><tr><th>Error type</th><th>What it catches</th><th class="mono">example</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">physics</td><td>An action producing an impossible result</td><td>a stone floats unaided</td></tr>
+        <tr><td class="mono">setting</td><td>An action that makes no sense in the place</td><td>pouring water underwater</td></tr>
+        <tr><td class="mono">contradiction</td><td>Two things that can't both be true</td><td>nothing fell out, yet it was full</td></tr>
+        <tr><td class="mono">causeeffect</td><td>A result that doesn't follow from its cause</td><td>a fort that reaches a high shelf</td></tr>
+        <tr><td class="mono">premise</td><td>A later line that breaks the story's own setup</td><td>sun preserves a snowflake</td></tr>
+      </tbody>
+    </table>
+
+    <div class="specimen keep">
+      <span class="tag">Keep · coherent, simple, fine</span>
+      "Hugo watered his little pear tree every day. One day a pear grew, and he picked it and ate it."
+      <div class="why">Plain, even a little thin, but every step follows. The judge keeps simplicity; it only culls breaks.</div>
+    </div>
+
+    <p>Calibration mattered as much as the rubric. A judge that culls everything looks accurate on bad stories and is useless. The keeper of last resort was a firm rule to <em>keep</em> imaginative liberty (a child calling a pressed shape "her snowflake") and normal processes (dough rising), and cull only genuine breaks.</p>
+
+    <div class="versus">
+      <div class="side">
+        <h4>Local 32B judge</h4>
+        <div class="sub">on the rented GPU pod</div>
+        <ul>
+          <li>Free on existing credits</li>
+          <li>Caught obvious local breaks</li>
+          <li><span class="lose">Missed distributed "premise" breaks</span></li>
+          <li><span class="lose">~0.08 stories/sec, days for the corpus</span></li>
+          <li><span class="lose">Capped by 30GB disk; couldn't fit bigger</span></li>
+        </ul>
+      </div>
+      <div class="mid">VS</div>
+      <div class="side b">
+        <h4>DeepSeek judge (API)</h4>
+        <div class="sub">thinking mode off</div>
+        <ul>
+          <li>Caught the premise breaks the 32B missed</li>
+          <li><span class="win">~55 stories/sec</span></li>
+          <li><span class="win">No GPU, no disk limit</span></li>
+          <li>~$4 for 200k verdicts</li>
+          <li>Errs slightly strict, the safe direction</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="lesson">
+      <span class="mk">LESSON</span>
+      <span>When replacing a story is nearly free, an over-strict judge is the correct judge. Culling a good story costs a fraction of a cent to regenerate; keeping a bad one poisons the training data permanently. The asymmetry says: when in doubt, cull.</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="kicker"><span class="num">4</span> The pivot</p>
+    <h2>From a local GPU to a $10 API pipeline</h2>
+    <p class="lede">The first corpus was generated on a local <span style="color:var(--qwen)">qwen3:14b</span> model running on a rented A40 pod, billed by the hour and babysat through disk limits, VRAM overflows and re-pulls. Testing the same prompts on the DeepSeek API changed the economics and the quality at once.</p>
+
+    <p>Two settings made or broke the switch. <b>Thinking mode</b> had to be forced off: a reasoning block per story would have multiplied the token cost tenfold. And the few-shot examples turned out to change story <em>richness</em>, not just rhythm, so they were kept for longer, more developed stories.</p>
+
+    <p>Then the numbers settled the model question outright. Judged on identical scenarios and prompts:</p>
+
+    <table>
+      <thead><tr><th>Generator</th><th class="mono">stories</th><th class="mono">cull rate</th><th>verdict</th></tr></thead>
+      <tbody>
+        <tr><td>qwen3:14b <span style="color:var(--muted)">(local pod)</span></td><td class="mono">~130,000</td><td class="mono lose">8.8%</td><td>working near its limit</td></tr>
+        <tr><td>deepseek-v4-flash <span style="color:var(--muted)">(API)</span></td><td class="mono">~85,000</td><td class="mono win">2.7%</td><td>~3× more reliable</td></tr>
+      </tbody>
+    </table>
+
+    <p>And the cost ran the same direction as the quality. The pod, rented by the hour and nursed through disk limits and re-pulls, cost <b>four times</b> as much as the API while producing the <em>less</em> reliable tier:</p>
+
+    <div class="stats" style="grid-template-columns:1fr 1fr;">
+      <div class="stat"><div class="n" style="color:var(--qwen)">$40.02</div><div class="l">GPU pod · ~130k stories (qwen3:14b)</div></div>
+      <div class="stat"><div class="n accent">$10.90</div><div class="l">DeepSeek · ~85k stories + all 220k judged</div></div>
+    </div>
+
+    <div class="lesson">
+      <span class="mk">LESSON</span>
+      <span>"I have free credits" pulled toward the pod; the real cost was elsewhere. The API generated cleaner stories <em>and</em> judged the entire corpus for a quarter of what the pod's raw generation cost, and removed the babysitting entirely. Free compute for the weaker tool is a false economy.</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="kicker"><span class="num">5</span> The result</p>
+    <h2>206,463 clean stories, for about $51 all in</h2>
+
+    <div class="stats">
+      <div class="stat"><div class="n keep">206,463</div><div class="l">stories kept</div></div>
+      <div class="stat"><div class="n">6.2%</div><div class="l">overall cull rate</div></div>
+      <div class="stat"><div class="n accent">65.7</div><div class="l">stories / sec judged</div></div>
+      <div class="stat"><div class="n">$50.92</div><div class="l">total (pod + API)</div></div>
+    </div>
+
+    <p>The corpus is a blend: roughly 130,000 stories generated on the local pod ($40.02) and 85,000 on the DeepSeek API, with all 220,000 judged by DeepSeek for a fraction of a cent each ($10.90 covering the API generation and the full judging pass). Of 220,241 stories judged, 13,610 were culled. The breakdown is a portrait of exactly the failure modes the whole pipeline was built to catch:</p>
+
+    <div class="bars">
+      <div class="bar-row"><span>physics</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="v">5,751</span></div>
+      <div class="bar-row"><span>causeeffect</span><span class="bar-track"><span class="bar-fill" style="width:97%"></span></span><span class="v">5,556</span></div>
+      <div class="bar-row"><span>premise</span><span class="bar-track"><span class="bar-fill" style="width:19%"></span></span><span class="v">1,094</span></div>
+      <div class="bar-row"><span>contradiction</span><span class="bar-track"><span class="bar-fill" style="width:16%"></span></span><span class="v">895</span></div>
+      <div class="bar-row"><span>setting</span><span class="bar-track"><span class="bar-fill" style="width:5%"></span></span><span class="v">314</span></div>
+    </div>
+
+    <p>Physics and cause-and-effect together are 83% of all breaks: the signature of a model welding two ill-fitting ideas together with an impossible mechanism. The 1,018 <span class="mono">premise</span> breaks are the subtle, distributed kind the local judge kept missing; catching them was the clearest argument for the API judge.</p>
+
+    <p>For comparison, the corpus this project imitates, the original TinyStories set, is roughly 2 million stories. This is about a tenth of that scale. And the cost split points the way forward: since the API tier was both cleaner and cheaper, every level from here on is generated on DeepSeek, and the pod stays off.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="kicker"><span class="num">6</span> What carried over</p>
+    <h2>Principles worth keeping</h2>
+    <p class="lede">Stripped of the specifics, the project kept returning to the same few ideas, the ones that transfer to any work with these models.</p>
+
+    <div class="knobs">
+      <div class="knob"><h4>Shape the input</h4><p>Don't ask for diversity or coherence; build it into what you hand the model. Scenario groups and opening rotation did more than any instruction.</p></div>
+      <div class="knob"><h4>Verify the output</h4><p>Don't trust an instruction to hold. A model told to obey physics still won't. Check afterwards with a separate, stronger reader.</p></div>
+      <div class="knob"><h4>Instructions aren't equal</h4><p>Positive beats negative ("start with the weather" &gt; "don't start with the name"). A strong prior beats a weak rule every time.</p></div>
+      <div class="knob"><h4>Let cost set the strategy</h4><p>When regeneration is nearly free, cull hard and top up. Calibration only matters when the corpus is fixed or expensive.</p></div>
+    </div>
+
+    <p class="pull">The project started by debugging why a chicken was sitting in a blanket fort. It ended with a fast, cheap, coherence-filtered pipeline, and most of the distance between the two was learning where to stop trusting the model and start checking it.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="big">Next: build the tokenizer on the 206k keep set, size the model against the real token count, and generate levels 2 to 6, pure DeepSeek, no pod.</p>
+    <p>Lab log · corpus pipeline · L1 complete. Figures are from the actual run: 220,241 judged · 206,463 kept · $40.02 pod + $10.90 API.</p>
+  </div>
+</footer>
+
+</body>
+</html>
