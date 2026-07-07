@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Training the Models: Lab Log, Part Two</title>
+<style>
+  :root{
+    --ink:#1a1c20;
+    --paper:#f6f4ee;
+    --paper-2:#efece3;
+    --line:#d6d1c4;
+    --muted:#6b6656;
+    --l1:#3f7d5c;
+    --l2:#3454d1;
+    --warn:#b8503a;
+    --mono:"SFMono-Regular",ui-monospace,"Cascadia Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--serif);line-height:1.6;font-size:18px;}
+  .wrap{max-width:820px;margin:0 auto;padding:0 24px;}
+
+  header{border-bottom:2px solid var(--ink);padding:56px 0 28px;}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin:0 0 18px;}
+  h1{font-size:clamp(34px,6vw,58px);line-height:1.02;margin:0 0 14px;font-weight:600;letter-spacing:-0.02em;}
+  h1 em{font-style:italic;color:var(--l2);}
+  .standfirst{font-size:20px;color:var(--muted);max-width:60ch;margin:0;}
+  .meta-row{display:flex;flex-wrap:wrap;gap:22px;font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;color:var(--muted);margin-top:26px;padding-top:18px;border-top:1px solid var(--line);}
+  .meta-row b{color:var(--ink);font-weight:600;}
+
+  section{padding:46px 0;border-bottom:1px solid var(--line);}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--l2);display:flex;align-items:center;gap:12px;margin:0 0 10px;}
+  .kicker .num{display:inline-grid;place-items:center;width:26px;height:26px;border:1.5px solid var(--l2);border-radius:50%;font-size:12px;}
+  h2{font-size:clamp(26px,4vw,36px);line-height:1.1;margin:0 0 18px;font-weight:600;letter-spacing:-0.01em;}
+  p{margin:0 0 18px;}
+  .lede{font-size:19px;}
+  a{color:var(--l2);}
+  code{font-family:var(--mono);font-size:.86em;background:var(--paper-2);padding:1px 5px;border-radius:3px;border:1px solid var(--line);}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin:26px 0;border-radius:3px;overflow:hidden;}
+  .stat{background:var(--paper);padding:18px 16px;}
+  .stat .n{font-family:var(--mono);font-size:26px;font-weight:600;letter-spacing:-.01em;}
+  .stat .n.l1{color:var(--l1);}
+  .stat .n.l2{color:var(--l2);}
+  .stat .l{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:4px;}
+  @media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr);}}
+
+  .lesson{display:flex;gap:14px;border:1px dashed var(--l2);border-radius:4px;padding:16px 18px;margin:22px 0;font-size:16px;}
+  .lesson .mk{font-family:var(--mono);color:var(--l2);font-size:13px;letter-spacing:.1em;flex:none;padding-top:2px;}
+
+  .pull{font-family:var(--serif);font-style:italic;font-size:23px;line-height:1.4;color:var(--ink);border-left:3px solid var(--l2);padding-left:18px;margin:26px 0;}
+
+  table{width:100%;border-collapse:collapse;margin:22px 0;font-size:15px;}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+  td.mono,th.mono{font-family:var(--mono);}
+  tr td:first-child{font-family:var(--mono);color:var(--muted);}
+
+  /* loss curve comparison, pure CSS/SVG */
+  .curve{background:var(--paper-2);border:1px solid var(--line);border-radius:4px;padding:20px;margin:24px 0;}
+  .curve svg{width:100%;height:auto;display:block;}
+  .legend{display:flex;gap:20px;font-family:var(--mono);font-size:12px;margin-top:10px;color:var(--muted);}
+  .legend span{display:flex;align-items:center;gap:6px;}
+  .swatch{width:14px;height:3px;border-radius:2px;display:inline-block;}
+
+  .config{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:22px 0;}
+  @media(max-width:640px){.config{grid-template-columns:1fr;}}
+  .cfg{border:1px solid var(--line);border-radius:4px;padding:14px 16px;background:var(--paper-2);}
+  .cfg h4{margin:0 0 6px;font-family:var(--mono);font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink);font-weight:600;}
+  .cfg p{margin:0;font-size:14.5px;color:var(--muted);line-height:1.5;}
+  .cfg .v{font-family:var(--mono);color:var(--ink);}
+
+  .story{background:var(--paper-2);border:1px solid var(--line);padding:16px 18px;border-radius:3px;margin:14px 0;font-size:16px;}
+  .story .tag{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;display:block;}
+  .story.a{border-left:3px solid var(--l1);} .story.a .tag{color:var(--l1);}
+  .story.b{border-left:3px solid var(--l2);} .story.b .tag{color:var(--l2);}
+
+  footer{padding:46px 0 70px;color:var(--muted);font-family:var(--mono);font-size:13px;}
+  footer .big{font-family:var(--serif);font-size:22px;color:var(--ink);margin-bottom:10px;line-height:1.4;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="eyebrow">Lab Log · Part Two · Training</p>
+    <h1>Two small models, and the <em>weight</em> of a harder story</h1>
+    <p class="standfirst">Having built a clean, graded corpus, the next step was to train models on it and see what they learned. Two levels, two models, the same 14-million-parameter network, a measurable difficulty gap, and an honest lesson: a good loss number did not buy reliably coherent stories.</p>
+    <div class="meta-row">
+      <span><b>Model</b> · 13.88M params, from scratch</span>
+      <span><b>Hardware</b> · one RTX 4060 Ti</span>
+      <span><b>Result</b> · right register, unreliable coherence</span>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <p class="kicker"><span class="num">1</span> The network</p>
+    <h2>A hand-written GPT, small enough to understand</h2>
+    <p class="lede">No framework wrapper. The model is a compact GPT written by hand: multi-head self-attention, residual blocks with pre-layer-norm, tied input and output embeddings, and the GPT-2 scaled initialisation. Small enough to read end to end, which was the point.</p>
+
+    <div class="config">
+      <div class="cfg"><h4>Parameters</h4><p class="v">13.88 M</p></div>
+      <div class="cfg"><h4>Layers / heads / width</h4><p class="v">6 / 6 / 384</p></div>
+      <div class="cfg"><h4>Context length</h4><p class="v">256 tokens</p><p>a whole story is ~120 to 150 tokens, so one full story fits with room to spare</p></div>
+      <div class="cfg"><h4>Vocabulary</h4><p class="v">8,192 (byte-level BPE)</p><p>trained on the corpus itself; ~1.15 tokens per word</p></div>
+      <div class="cfg"><h4>Optimiser</h4><p class="v">AdamW · cosine LR · warmup</p></div>
+      <div class="cfg"><h4>Training</h4><p class="v">8,000 steps · batch 64 · bf16</p><p>about an hour per model on a single consumer GPU</p></div>
+    </div>
+
+    <p>The corpus was tokenised once into a packed binary stream (each story followed by an <code>&lt;|endoftext|&gt;</code> marker so the model learns where stories begin and end), then memory-mapped during training so start-up was instant and nothing was re-tokenised between runs.</p>
+
+    <div class="lesson">
+      <span class="mk">WHY</span>
+      <span>The Chinchilla rule of thumb suggested a model of barely one to two million parameters for this much data. TinyStories showed that rule is far too cautious for a narrow domain: coherent story models have run from one to thirty-five million parameters on comparable text. Fourteen million was chosen to sit comfortably inside that range, then validation loss was watched to confirm it wasn't overfitting.</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="kicker"><span class="num">2</span> Level 1</p>
+    <h2>The first model learned to tell a story</h2>
+    <p class="lede">Level 1 is toddler-core: one character, one object, one simple goal, resolved. Trained on 206,000 clean stories (23.3 million tokens), the model's loss fell fast and cleanly, and train and validation stayed locked together the whole way, the signature of a model that is learning the language rather than memorising the corpus.</p>
+
+    <div class="stats">
+      <div class="stat"><div class="n l1">9.12 → 1.40</div><div class="l">val loss, start → end</div></div>
+      <div class="stat"><div class="n l1">~2.0</div><div class="l">bits / token</div></div>
+      <div class="stat"><div class="n l1">23.3 M</div><div class="l">training tokens</div></div>
+      <div class="stat"><div class="n l1">0.05</div><div class="l">train-val gap (no overfit)</div></div>
+    </div>
+
+    <p>The real test is not the loss but the text. Prompted with four opening cues, the model generated its own stories from scratch, and the results were a useful reality check. Of the four, one was clearly coherent, two were short but acceptable, and one drifted into near-nonsense:</p>
+
+    <div class="story a">
+      <span class="tag">L1 samples · generated · honest read</span>
+      Mixed. The best of the four held together as a real little story with a character and a goal. The other three ranged from short-but-fine to disjointed. The model had plainly learned the <em>register</em> and vocabulary, its sentences are simple, correct, and on-tone, but sustained, multi-sentence coherence was hit and miss.
+    </div>
+
+    <p>This is the honest and more useful result. A validation loss of 1.40 is a genuinely good number, and it did <em>not</em> guarantee coherent text. The model learned the surface of the language convincingly while still fumbling the through-line of a story on half the prompts. Low loss bought fluency, not reliable sense.</p>
+
+    <div class="lesson">
+      <span class="mk">NOTE</span>
+      <span>Two caveats sit behind that gap, and they matter for what comes next. The loss was still falling when training stopped, so the model may have been undertrained rather than at its ceiling. And 14 million parameters is genuinely small. The next experiment holds training fixed and grows the model, to see which of the two was the real limit.</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="kicker"><span class="num">3</span> Level 2</p>
+    <h2>Then a harder level, and the same honest picture</h2>
+    <p class="lede">Level 2 adds a second character and an interaction between them, plus feelings that must have a stated cause ("she was sad <em>because</em> the kite broke"). The stories run longer, about 148 tokens against Level 1's 117. The open question: can a 14-million-parameter model hold two distinct characters together?</p>
+
+    <p>Trained the same way, on 150,000 stories (22.2 million tokens, all written by the API generator). At its best, the model did produce genuine two-character stories, distinct names, an interaction, an emotion with a cause. But like Level 1, it was inconsistent: the good samples were good, and the weak ones lost the thread or blurred the two characters together.</p>
+
+    <div class="story b">
+      <span class="tag">L2 samples · generated · honest read</span>
+      Capable at its best, shaky on average. When it worked, two named children interacted and one affected the other, exactly the target register. When it did not, the second character faded or the middle wandered. The capacity for two-character stories was clearly present; the <em>reliability</em> was not yet there.
+    </div>
+
+    <p>So the answer to the question is a qualified yes: a 14-million-parameter model <em>can</em> reach for two-character interaction, but at this size and training length it cannot do it dependably. That is a more precise finding than a simple pass or fail, and it sets up exactly the right next move.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="kicker"><span class="num">4</span> The finding</p>
+    <h2>The difficulty ladder is real, and you can measure it</h2>
+    <p class="lede">Because both models were identical, same size, same architecture, same token budget, same training, the only variable was the difficulty of the text. And the harder level cost the model something measurable.</p>
+
+    <div class="curve">
+      <svg viewBox="0 0 700 300" xmlns="http://www.w3.org/2000/svg" font-family="var(--mono)">
+        <!-- axes -->
+        <line x1="60" y1="20" x2="60" y2="250" stroke="#d6d1c4" stroke-width="1.5"/>
+        <line x1="60" y1="250" x2="670" y2="250" stroke="#d6d1c4" stroke-width="1.5"/>
+        <!-- y labels -->
+        <text x="52" y="60" text-anchor="end" font-size="11" fill="#6b6656">3.5</text>
+        <text x="52" y="130" text-anchor="end" font-size="11" fill="#6b6656">2.5</text>
+        <text x="52" y="200" text-anchor="end" font-size="11" fill="#6b6656">1.7</text>
+        <text x="52" y="243" text-anchor="end" font-size="11" fill="#6b6656">1.4</text>
+        <!-- x labels -->
+        <text x="60" y="268" text-anchor="middle" font-size="11" fill="#6b6656">0</text>
+        <text x="235" y="268" text-anchor="middle" font-size="11" fill="#6b6656">1k</text>
+        <text x="470" y="268" text-anchor="middle" font-size="11" fill="#6b6656">3k</text>
+        <text x="650" y="268" text-anchor="middle" font-size="11" fill="#6b6656">5k+</text>
+        <!-- L1 curve (approx from real steps: 250->3.49,500->2.61,750->2.22,1000->2.02,2000->1.69,3000->1.55,5250->1.42) -->
+        <polyline fill="none" stroke="#3f7d5c" stroke-width="2.5"
+          points="95,63 130,127 165,165 200,184 320,212 440,226 620,238"/>
+        <!-- L2 curve (250->3.46,500->2.76,750->2.36,1000->2.17,... ends ~1.52) -->
+        <polyline fill="none" stroke="#3454d1" stroke-width="2.5" stroke-dasharray="1"
+          points="95,66 130,110 165,150 200,171 320,201 440,216 620,229"/>
+        <!-- end gap marker -->
+        <line x1="620" y1="229" x2="620" y2="238" stroke="#b8503a" stroke-width="1.5"/>
+        <text x="632" y="236" font-size="10" fill="#b8503a">gap</text>
+      </svg>
+      <div class="legend">
+        <span><i class="swatch" style="background:#3f7d5c"></i> Level 1 (one character)</span>
+        <span><i class="swatch" style="background:#3454d1"></i> Level 2 (two characters)</span>
+      </div>
+    </div>
+
+    <table>
+      <thead><tr><th>step</th><th class="mono">L1 val loss</th><th class="mono">L2 val loss</th></tr></thead>
+      <tbody>
+        <tr><td>250</td><td class="mono">3.49</td><td class="mono">3.46</td></tr>
+        <tr><td>500</td><td class="mono">2.61</td><td class="mono">2.76</td></tr>
+        <tr><td>1000</td><td class="mono">2.02</td><td class="mono">2.17</td></tr>
+        <tr><td>final</td><td class="mono">~1.40</td><td class="mono">~1.52</td></tr>
+      </tbody>
+    </table>
+
+    <p>The two curves tell a small, satisfying story of their own. At the very first checkpoint, Level 2 is fractionally <em>lower</em>, its stories all come from one generator, so their surface patterns are uniform and easy to grab early. But once the model moves past surface statistics into actual structure, the harder content pulls Level 2's loss above Level 1's and keeps it there. The two levels cross over, and the gap holds to the end: about 0.1 bits per token.</p>
+
+    <p class="pull">The same model, given a harder kind of story, compresses it less well. The difficulty grading was not just a label on the data. The model could feel it.</p>
+
+    <div class="lesson">
+      <span class="mk">FINDING</span>
+      <span>A curriculum's levels can be validated, not just asserted. Train identical models on each level and compare their converged loss: if a level is genuinely harder, its loss sits measurably higher. Level 2 cost ~0.1 bits per token over Level 1, and a 14M model still had the capacity to handle it, which is a data point about how model size might need to scale as the levels get harder still.</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="kicker"><span class="num">5</span> What carried over</p>
+    <h2>Principles from the training half</h2>
+    <div class="config">
+      <div class="cfg"><h4>Loss is a difficulty meter</h4><p>Identical models on different data turn converged loss into a measurement of how hard the data is. Two numbers, one real finding.</p></div>
+      <div class="cfg"><h4>Watch the train-val gap</h4><p>It stayed near 0.05 at both levels: the models learned the language, not the corpus. The clean, large corpus made overfitting a non-issue at this size.</p></div>
+      <div class="cfg"><h4>Loss is not coherence</h4><p>A good validation loss (1.40) still produced disjointed samples on half the prompts. Fluency and sense are different things; only reading the output reveals the second.</p></div>
+      <div class="cfg"><h4>Capacity is the open question</h4><p>14M learned the register but not reliable coherence. The next run grows the model with everything else held fixed, to separate "too small" from "undertrained".</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="big">Next: grow the model, hold everything else fixed, and re-read the samples. Is the shaky coherence a limit of size, or was the model simply undertrained? One experiment separates the two.</p>
+    <p>Lab log · part two · training. Figures from the actual runs: L1 val ~1.40 · L2 val ~1.52 · 13.88M params · one RTX 4060 Ti. Samples: right register, coherence hit and miss.</p>
+  </div>
+</footer>
+
+</body>
+</html>
